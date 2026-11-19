@@ -1,3 +1,4 @@
+
 const VIVIENDAS = ['casa', 'departamento', 'otra'];
 const ESTADOS_ANIMAL = ['registrado', 'con_microchip', 'inscrito', 'fallecido'];
 const APTOS = ['con_microchip', 'inscrito'];
@@ -15,8 +16,10 @@ export function crearPostulacion({ consultarNucleo, consultarRegistro, tokenRegi
       postulanteRut, animalID, viviendaTipo, tienePatio, hayNinos,
       tieneOtrasMascotas, motivoAdopcion, consentimientoCohabitantes,
     } = req.body ?? {};
+
+    // Validamos los datos antes de consultar otros servicios o MongoDB.
     if (typeof postulanteRut !== 'string' || !/^\d{1,8}-[\dK]$/i.test(postulanteRut)) {
-      return error(res, 400, 'RUT_INVALIDO', 'Indica el RUT del postulante sin puntos y con guión');
+      return error(res, 400, 'DATO_INVALIDO', 'Indica el RUT sin puntos y con guión');
     }
     const rut = req.usuario.rut.toUpperCase();
     if (postulanteRut.toUpperCase() !== rut) {
@@ -27,29 +30,29 @@ export function crearPostulacion({ consultarNucleo, consultarRegistro, tokenRegi
         [tienePatio, hayNinos, tieneOtrasMascotas].some(valor => typeof valor !== 'boolean') ||
         typeof motivoAdopcion !== 'string' || !motivoAdopcion.trim() ||
         consentimientoCohabitantes !== true) {
-      return error(res, 400, 'DATOS_INVALIDOS', 'Revisa el animal, los datos del hogar y el consentimiento obligatorio');
+      return error(res, 400, 'DATO_INVALIDO', 'Revisa el animal, los datos del hogar y el consentimiento');
     }
     if (!guardar) {
-      return error(res, 503, 'SERVICIO_NO_DISPONIBLE', 'El almacenamiento de postulaciones no está disponible');
+      return error(res, 503, 'SERVICIO_NO_DISPONIBLE', 'El almacenamiento no está disponible');
     }
 
-    const usuarioAuth = req.get('Authorization');
+    const autorizacion = req.get('Authorization');
     const animal = await consultarRegistro(`/api/registro/animales/${encodeURIComponent(animalID)}`, {
-      headers: { Authorization: tokenRegistro ? `Bearer ${tokenRegistro}` : usuarioAuth },
+      headers: { Authorization: tokenRegistro ? `Bearer ${tokenRegistro}` : autorizacion },
     });
     if (animal.estado === 404 && animal.datos?.error?.codigo === 'ANIMAL_NO_ENCONTRADO') {
       return error(res, 404, 'ANIMAL_NO_ENCONTRADO', 'El animal no existe en el registro');
     }
     if (animal.estado !== 200 || animal.datos?.animalId !== animalID ||
         !ESTADOS_ANIMAL.includes(animal.datos.estado)) {
-      return error(res, 503, 'SERVICIO_NO_DISPONIBLE', 'No pudimos comprobar el animal en el registro');
+      return error(res, 503, 'SERVICIO_NO_DISPONIBLE', 'No pudimos comprobar el animal');
     }
     if (!APTOS.includes(animal.datos.estado) || !animal.datos.microchip) {
       return error(res, 409, 'ANIMAL_NO_DISPONIBLE', 'El animal no está apto para adopción');
     }
 
     const persona = await consultarNucleo(`/api/nucleo/usuarios/${encodeURIComponent(rut)}`, {
-      headers: { Authorization: usuarioAuth },
+      headers: { Authorization: autorizacion },
     });
     if (persona.estado === 401) {
       return error(res, 401, 'TOKEN_INVALIDO', 'El token no es válido o expiró');
