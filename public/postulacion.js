@@ -9,6 +9,7 @@ const resultado = porId('resultado');
 const salir = porId('salir');
 const recargar = porId('recargar');
 let token;
+let postulanteRut;
 let animalID;
 
 const conflictos = new Map([
@@ -43,6 +44,7 @@ function mensaje(cuerpo, alternativa) {
 
 function cerrarSesion(texto) {
   token = undefined;
+  postulanteRut = undefined;
   animalID = undefined;
   formulario.reset();
   catalogo.hidden = solicitud.hidden = salir.hidden = true;
@@ -119,10 +121,11 @@ sesion.addEventListener('submit', async evento => {
     }
     const validacion = await api('/api/adopciones/acceso/vecino', { bearer: login.cuerpo.token });
     if (validacion.estado === 403) return mostrar(aviso, 'Solo las cuentas con perfil vecino pueden postular.');
-    if (validacion.estado !== 200 || validacion.cuerpo?.perfil !== 'vecino') {
+    if (validacion.estado !== 200 || validacion.cuerpo?.perfil !== 'vecino' || !validacion.cuerpo.rut) {
       return mostrar(aviso, mensaje(validacion.cuerpo, 'No pudimos validar tu sesión.'));
     }
     token = login.cuerpo.token;
+    postulanteRut = validacion.cuerpo.rut;
     inicio.hidden = true;
     salir.hidden = catalogo.hidden = false;
     await cargarCatalogo();
@@ -149,6 +152,7 @@ formulario.addEventListener('submit', async evento => {
 
   const activo = token;
   const datos = {
+    postulanteRut,
     animalID,
     viviendaTipo: campos.get('viviendaTipo'),
     tienePatio: campos.get('tienePatio') === 'si',
