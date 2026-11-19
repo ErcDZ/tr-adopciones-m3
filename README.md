@@ -64,7 +64,7 @@ Con Express en ejecución, abre `http://localhost:3000/` (o el puerto configurad
 
 ### Contrato provisional para integrar con HU-01 y postulaciones
 
-La interfaz llama a estas rutas en el mismo origen y envía el token Bearer. Este repositorio aún requiere los controladores de catálogo y postulaciones del equipo. Si el equipo ya acordó rutas, nombres o valores distintos, adapta las llamadas y el mapeo en `public/postulacion.js` al contrato acordado.
+La interfaz llama a estas rutas en el mismo origen y envía el token Bearer. El endpoint de postulaciones se incluye en este repositorio. El catálogo aún requiere el controlador de HU-01 del equipo.
 
 - `GET /api/adopciones/catalogo` devuelve `200` y `{ "datos": [{ "animalID": "A-001", "nombre": "Ejemplo" }] }`. El formulario toma el identificador de la selección.
 - `POST /api/adopciones/postulaciones` recibe el JSON de abajo y devuelve `201` con `{ "postulacionID": "POST-001" }`. El código recibido se muestra en pantalla.
@@ -72,6 +72,7 @@ La interfaz llama a estas rutas en el mismo origen y envía el token Bearer. Est
 
 ```json
 {
+  "postulanteRut": "12345678-9",
   "animalID": "A-001",
   "viviendaTipo": "casa",
   "tienePatio": true,
@@ -83,3 +84,24 @@ La interfaz llama a estas rutas en el mismo origen y envía el token Bearer. Est
 ```
 
 El formulario exige una opción explícita de sí o no para los tres campos booleanos. Los valores de vivienda implementados son `casa`, `departamento` y `otra`. La casilla de consentimiento empieza desmarcada y debe marcarse antes de enviar.
+
+## Endpoint de postulaciones y MongoDB
+
+Configura `MONGODB_URI` en el entorno local con un replica set o un clúster de Atlas que admita transacciones. Un servidor standalone de MongoDB no admite la transacción que protege RN-06. La base se llama `tr_adopciones` y la colección `postulaciones`. El servicio puede iniciar sin esta variable para probar la autenticación, pero el alta devuelve `503` mientras no haya almacenamiento configurado.
+
+- `M1_URL` es el origen HTTP del registro. Si se omite, se usa `NUCLEO_URL`. El ZIP del núcleo no incluye el registro simulado. Si usas el ZIP para autenticación, configura por separado el origen del registro y un token que el registro acepte.
+- `M1_TOKEN` es un token Bearer de servicio (solo el valor del token) autorizado para consultar los animales del catálogo. Guárdalo exclusivamente en el servidor y renuévalo antes de que expire. Si se omite, se reenvía el token del vecino y aplican las restricciones de propiedad del simulador. Una respuesta de acceso denegado del registro se traduce en `503` para esa verificación. Usa el servicio y las cuentas autorizadas por el equipo.
+
+`POST /api/adopciones/postulaciones` exige el JSON documentado arriba. El servidor compara `postulanteRut` con el RUT confirmado por el núcleo y usa ese RUT confirmado para consultar la prohibición de tenencia y guardar. Considera apto al animal registrado en M1 con microchip y estado `con_microchip` o `inscrito`. El registro simulado devuelve el identificador con el nombre `animalId`.
+
+| HTTP | Motivo |
+| --- | --- |
+| `201` | Documento guardado con `postulacionID`, estado `recibida` y `fechaCreacion` en UTC ISO 8601. `Location` identifica la postulación creada. |
+| `400` | JSON inválido, RUT con formato incorrecto o datos del formulario inválidos. |
+| `401` | Token ausente o inválido. |
+| `403` | Perfil distinto de vecino o RUT distinto al de la sesión. |
+| `404 ANIMAL_NO_ENCONTRADO` | M1 confirma que el animal no existe. |
+| `409` | `ANIMAL_NO_DISPONIBLE`, `PROHIBICION_TENENCIA`, `LIMITE_POSTULACIONES` o `POSTULACION_DUPLICADA`. |
+| `503` | Una dependencia no permite completar la verificación o falta configurar MongoDB. |
+
+MongoDB utiliza un índice único de RUT y animal para impedir duplicados en cualquier estado. La transacción actualiza primero un documento de control por RUT y después cuenta las postulaciones `recibida` y `en_evaluación`. Las solicitudes simultáneas del mismo RUT compiten por el mismo control, por lo que una transacción reintenta con un conteo actualizado. Los futuros cambios de estado que vuelvan a activar una postulación deberán aplicar la misma coordinación.

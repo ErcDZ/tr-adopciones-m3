@@ -1,6 +1,7 @@
 import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { crearClienteNucleo } from './nucleo.js';
+import { crearPostulacion, RUTA_POSTULACIONES } from './postulaciones.js';
 
 const SESIONES = '/api/nucleo/sesiones';
 
@@ -29,8 +30,9 @@ function requierePerfil(...perfiles) {
   };
 }
 
-export function crearApp({ nucleoUrl, timeoutMs = 35_000 }) {
+export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUrl, tokenRegistro, guardarPostulacion }) {
   const consultarNucleo = crearClienteNucleo(nucleoUrl, timeoutMs);
+  const consultarRegistro = crearClienteNucleo(registroUrl, timeoutMs);
   const app = express();
   app.disable('x-powered-by');
   app.use(express.static(fileURLToPath(new URL('../public/', import.meta.url))));
@@ -89,6 +91,9 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000 }) {
 
   app.get('/api/adopciones/acceso/vecino', autenticar, requierePerfil('vecino'), responderUsuario);
   app.get('/api/adopciones/acceso/funcionario', autenticar, requierePerfil('funcionario'), responderUsuario);
+  app.post(RUTA_POSTULACIONES, autenticar, requierePerfil('vecino'), express.json(), crearPostulacion({
+    consultarNucleo, consultarRegistro, tokenRegistro, guardar: guardarPostulacion, error,
+  }));
 
   app.use((req, res) => error(res, 404, 'RUTA_NO_ENCONTRADA', 'La ruta no existe'));
 
