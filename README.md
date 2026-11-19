@@ -57,3 +57,29 @@ npm test
 ```
 
 La suite usa Express y un servidor HTTP de prueba que imita el contrato del núcleo. Verifica inicio de sesión, validación de entradas, propagación del token, acceso por perfil, acceso denegado, token inválido o expirado y fallos o demora del núcleo. Se ejecuta sin credenciales ni conexión a Render.
+
+## Formulario de postulación
+
+Con Express en ejecución, abre `http://localhost:3000/` (o el puerto configurado), inicia sesión como vecino y selecciona **Solicitar adopción** en el catálogo. El token se mantiene en memoria mientras está abierta la página. Tras autenticar, la interfaz comprueba el perfil con la ruta protegida de vecino. El backend de postulaciones también debe autenticar y autorizar cada solicitud.
+
+### Contrato provisional para integrar con HU-01 y postulaciones
+
+La interfaz llama a estas rutas en el mismo origen y envía el token Bearer. Este repositorio aún requiere los controladores de catálogo y postulaciones del equipo. Si el equipo ya acordó rutas, nombres o valores distintos, adapta las llamadas y el mapeo en `public/postulacion.js` al contrato acordado.
+
+- `GET /api/adopciones/catalogo` devuelve `200` y `{ "datos": [{ "animalID": "A-001", "nombre": "Ejemplo" }] }`. El formulario toma el identificador de la selección.
+- `POST /api/adopciones/postulaciones` recibe el JSON de abajo y devuelve `201` con `{ "postulacionID": "POST-001" }`. El código recibido se muestra en pantalla.
+- `400` muestra el mensaje de validación del servidor o pide revisar los campos obligatorios. `409` admite `LIMITE_POSTULACIONES`, `PROHIBICION_TENENCIA` y `ANIMAL_NO_DISPONIBLE`. También se muestra el mensaje del servidor si envía otro código. El backend decide y aplica estas reglas de negocio.
+
+```json
+{
+  "animalID": "A-001",
+  "viviendaTipo": "casa",
+  "tienePatio": true,
+  "hayNinos": false,
+  "tieneOtrasMascotas": true,
+  "motivoAdopcion": "Queremos adoptar y podemos asumir sus cuidados.",
+  "consentimientoCohabitantes": true
+}
+```
+
+El formulario exige una opción explícita de sí o no para los tres campos booleanos. Los valores de vivienda implementados son `casa`, `departamento` y `otra`. La casilla de consentimiento empieza desmarcada y debe marcarse antes de enviar.

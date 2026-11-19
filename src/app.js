@@ -1,4 +1,5 @@
 import express from 'express';
+import { fileURLToPath } from 'node:url';
 import { crearClienteNucleo } from './nucleo.js';
 
 const SESIONES = '/api/nucleo/sesiones';
@@ -32,6 +33,7 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000 }) {
   const consultarNucleo = crearClienteNucleo(nucleoUrl, timeoutMs);
   const app = express();
   app.disable('x-powered-by');
+  app.use(express.static(fileURLToPath(new URL('../public/', import.meta.url))));
 
   app.post(SESIONES, express.json(), async (req, res) => {
     const { rut, clave } = req.body ?? {};
