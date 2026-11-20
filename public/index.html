@@ -8,7 +8,16 @@
   <script type="module" src="/postulacion.js"></script>
 </head>
 <body>
-  <header><div class="marco"><a href="/">Adopciones municipales</a><button id="salir" type="button" hidden>Cerrar sesión</button></div></header>
+  <header>
+    <div class="marco">
+      <a href="/">Adopciones municipales</a>
+      <nav id="menu-vecino" hidden>
+        <button id="ver-catalogo" type="button">Catálogo</button>
+        <button id="ver-postulaciones" type="button">Mis postulaciones</button>
+        <button id="salir" type="button">Cerrar sesión</button>
+      </nav>
+    </div>
+  </header>
   <main class="marco">
     <section id="inicio">
       <h1>Inicia sesión</h1>
@@ -27,6 +36,17 @@
       <h1>Animales en adopción</h1>
       <div id="animales"></div>
       <button id="recargar" type="button" hidden>Reintentar carga</button>
+    </section>
+
+    <section id="mis-postulaciones" hidden>
+      <h1>Mis postulaciones</h1>
+      <div id="lista-postulaciones"></div>
+      <div id="paginacion-postulaciones" hidden>
+        <button id="pagina-anterior" type="button">Anterior</button>
+        <span id="info-pagina"></span>
+        <button id="pagina-siguiente" type="button">Siguiente</button>
+      </div>
+      <button id="recargar-postulaciones" type="button" hidden>Reintentar carga</button>
     </section>
 
     <section id="solicitud" hidden>
