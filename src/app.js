@@ -2,6 +2,7 @@ import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { crearClienteNucleo } from './nucleo.js';
 import { crearPostulacion, RUTA_POSTULACIONES } from './postulaciones.js';
+import { listarAnimalesDisponibles, RUTA_ANIMALES_DISPONIBLES } from './animales.js';
 
 const SESIONES = '/api/nucleo/sesiones';
 
@@ -94,6 +95,13 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
   app.post(RUTA_POSTULACIONES, autenticar, requierePerfil('vecino'), express.json(), crearPostulacion({
     consultarNucleo, consultarRegistro, tokenRegistro, guardar: guardarPostulacion, error,
   }));
+
+  app.get(
+    RUTA_ANIMALES_DISPONIBLES,
+    autenticar,
+    requierePerfil('vecino', 'funcionario'),
+    listarAnimalesDisponibles({ consultarRegistro, tokenRegistro, error })
+  );
 
   app.use((req, res) => error(res, 404, 'RUTA_NO_ENCONTRADA', 'La ruta no existe'));
 
