@@ -9,7 +9,7 @@ export async function crearRepositorioPostulaciones(cliente) {
   await postulaciones.createIndex({ postulanteRut: 1, animalID: 1 }, { unique: true });
   await postulaciones.createIndex({ postulanteRut: 1, estado: 1 });
 
-  return async datos => {
+  const guardar = async datos => {
     const rut = datos.postulanteRut;
     // El documento de control permite serializar las escrituras de un mismo RUT.
     try {
@@ -39,4 +39,26 @@ export async function crearRepositorioPostulaciones(cliente) {
       return { documento };
     }, { readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' } }));
   };
+
+  guardar.listar = async ({ postulanteRut, estado, page = 1, limit = 10 }) => {
+    const filtro = {};
+    if (postulanteRut) filtro.postulanteRut = postulanteRut;
+    if (estado) filtro.estado = estado;
+
+    const total = await postulaciones.countDocuments(filtro);
+    const datos = await postulaciones
+      .find(filtro, { projection: { _id: 0 } })
+      .sort({ fechaCreacion: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .toArray();
+
+    return { page, limit, total, datos };
+  };
+
+  guardar.obtenerPorId = async postulacionID => {
+    return postulaciones.findOne({ postulacionID }, { projection: { _id: 0 } });
+  };
+
+  return guardar;
 }
