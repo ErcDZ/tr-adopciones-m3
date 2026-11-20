@@ -1,21 +1,37 @@
 const porId = id => document.getElementById(id);
 const inicio = porId('inicio');
 const sesion = porId('sesion');
+const menuVecino = porId('menu-vecino');
 const catalogo = porId('catalogo');
+const misPostulaciones = porId('mis-postulaciones');
 const solicitud = porId('solicitud');
 const formulario = porId('postulacion');
 const aviso = porId('aviso');
 const resultado = porId('resultado');
 const salir = porId('salir');
 const recargar = porId('recargar');
+const recargarPostulaciones = porId('recargar-postulaciones');
+
 let token;
 let postulanteRut;
 let animalID;
+let paginaActual = 1;
+const LIMITE_POR_PAGINA = 5;
 
 const conflictos = new Map([
   ['LIMITE_POSTULACIONES', 'Ya tienes el máximo de dos postulaciones.'],
   ['PROHIBICION_TENENCIA', 'Existe una prohibición de tenencia asociada a tu cuenta.'],
   ['ANIMAL_NO_DISPONIBLE', 'El animal ya no está disponible para adopción.'],
+]);
+
+const etiquetasEstado = new Map([
+  ['recibida', 'Recibida'],
+  ['en_evaluacion', 'En evaluación'],
+  ['en_evaluación', 'En evaluación'],
+  ['aprobada', 'Aprobada'],
+  ['rechazada', 'Rechazada'],
+  ['cancelada', 'Cancelada'],
+  ['adopcion_concretada', 'Adopción concretada'],
 ]);
 
 function mostrar(elemento, texto = '') {
@@ -42,12 +58,20 @@ function mensaje(cuerpo, alternativa) {
   return typeof detalle === 'string' && detalle.trim() ? detalle : alternativa;
 }
 
+function ocultarVistas() {
+  catalogo.hidden = true;
+  misPostulaciones.hidden = true;
+  solicitud.hidden = true;
+}
+
 function cerrarSesion(texto) {
   token = undefined;
   postulanteRut = undefined;
   animalID = undefined;
+  paginaActual = 1;
   formulario.reset();
-  catalogo.hidden = solicitud.hidden = salir.hidden = true;
+  ocultarVistas();
+  menuVecino.hidden = true;
   inicio.hidden = false;
   mostrar(resultado);
   mostrar(aviso, texto);
@@ -55,6 +79,88 @@ function cerrarSesion(texto) {
 
 salir.addEventListener('click', () => cerrarSesion());
 recargar.addEventListener('click', cargarCatalogo);
+recargarPostulaciones.addEventListener('click', () => cargarPostulaciones(paginaActual));
+
+porId('ver-catalogo').addEventListener('click', async () => {
+  if (!token) return;
+  ocultarVistas();
+  mostrar(aviso);
+  mostrar(resultado);
+  catalogo.hidden = false;
+  await cargarCatalogo();
+});
+
+porId('ver-postulaciones').addEventListener('click', async () => {
+  if (!token) return;
+  ocultarVistas();
+  mostrar(aviso);
+  mostrar(resultado);
+  misPostulaciones.hidden = false;
+  await cargarPostulaciones(1);
+});
+
+porId('pagina-anterior').addEventListener('click', () => {
+  if (paginaActual > 1) cargarPostulaciones(paginaActual - 1);
+});
+
+porId('pagina-siguiente').addEventListener('click', () => {
+  cargarPostulaciones(paginaActual + 1);
+});
+
+async function cargarPostulaciones(pagina = 1) {
+  const activo = token;
+  const contenedor = porId('lista-postulaciones');
+  const paginacion = porId('paginacion-postulaciones');
+  contenedor.replaceChildren();
+  paginacion.hidden = true;
+  recargarPostulaciones.hidden = true;
+  mostrar(aviso);
+
+  try {
+    const ruta = `/api/adopciones/postulaciones?page=${pagina}&limit=${LIMITE_POR_PAGINA}`;
+    const { estado, cuerpo } = await api(ruta, { bearer: activo });
+    if (activo !== token) return;
+    if (estado === 401) return cerrarSesion('Tu sesión expiró. Inicia sesión nuevamente.');
+    if (estado !== 200 || !Array.isArray(cuerpo?.datos)) throw new Error();
+
+    paginaActual = cuerpo.page;
+    const totalPaginas = Math.max(1, Math.ceil(cuerpo.total / cuerpo.limit));
+
+    if (cuerpo.datos.length === 0) {
+      contenedor.textContent = 'Aún no tienes solicitudes de adopción registradas.';
+      return;
+    }
+
+    for (const item of cuerpo.datos) {
+      const tarjeta = document.createElement('article');
+      const titulo = document.createElement('strong');
+      titulo.textContent = `Animal: ${item.animalID} — Estado: ${etiquetasEstado.get(item.estado) ?? item.estado}`;
+
+      const detalle = document.createElement('p');
+      const fecha = item.fechaCreacion ? new Date(item.fechaCreacion).toLocaleString('es-CL') : 'Sin fecha';
+      detalle.textContent = `Código: ${item.postulacionID} | Fecha: ${fecha} | Vivienda: ${item.viviendaTipo}`;
+
+      tarjeta.append(titulo, detalle);
+      if (item.observaciones) {
+        const obs = document.createElement('p');
+        obs.textContent = `Observaciones: ${item.observaciones}`;
+        tarjeta.append(obs);
+      }
+      contenedor.append(tarjeta);
+    }
+
+    if (cuerpo.total > cuerpo.limit) {
+      porId('info-pagina').textContent = `Página ${paginaActual} de ${totalPaginas} (${cuerpo.total} solicitudes)`;
+      porId('pagina-anterior').disabled = paginaActual <= 1;
+      porId('pagina-siguiente').disabled = paginaActual >= totalPaginas;
+      paginacion.hidden = false;
+    }
+  } catch {
+    if (activo !== token) return;
+    mostrar(aviso, 'No pudimos cargar tus postulaciones. Intenta nuevamente.');
+    recargarPostulaciones.hidden = false;
+  }
+}
 
 async function cargarCatalogo() {
   const activo = token;
@@ -127,7 +233,8 @@ sesion.addEventListener('submit', async evento => {
     token = login.cuerpo.token;
     postulanteRut = validacion.cuerpo.rut;
     inicio.hidden = true;
-    salir.hidden = catalogo.hidden = false;
+    menuVecino.hidden = false;
+    catalogo.hidden = false;
     await cargarCatalogo();
   } catch {
     mostrar(aviso, 'No pudimos conectar con el servicio. Intenta nuevamente.');
