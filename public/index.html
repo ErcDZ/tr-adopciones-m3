@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Adopciones municipales</title>
+  <link rel="stylesheet" href="/estilos.css">
+  <script type="module" src="/postulacion.js"></script>
+</head>
+<body>
+  <header><div class="marco"><a href="/">Adopciones municipales</a><button id="salir" type="button" hidden>Cerrar sesión</button></div></header>
+  <main class="marco">
+    <section id="inicio">
+      <h1>Inicia sesión</h1>
+      <p>Usa tu cuenta de vecino para elegir un animal y solicitar su adopción.</p>
+      <form id="sesion">
+        <label>RUT <input name="rut" required autocomplete="username" placeholder="Sin puntos y con guión"></label>
+        <label>Clave <input name="clave" type="password" required autocomplete="current-password"></label>
+        <button>Ingresar</button>
+      </form>
+    </section>
+
+    <p id="aviso" role="alert" tabindex="-1" hidden></p>
+    <p id="resultado" role="status" tabindex="-1" hidden></p>
+
+    <section id="catalogo" hidden>
+      <h1>Animales en adopción</h1>
+
+      <form id="filtros-catalogo" class="campos">
+        <label>Especie
+          <input id="filtro-especie" name="especie" type="search" placeholder="Ej. perro, gato (vacío = todas)">
+        </label>
+        <label>Por página (limit)
+          <select id="filtro-limit" name="limit">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+          </select>
+        </label>
+        <div>
+          <button type="submit">Filtrar</button>
+          <button id="limpiar-filtros" class="secundario" type="button">Limpiar</button>
+        </div>
+      </form>
+
+      <p id="estado-catalogo" role="status" hidden></p>
+      <div id="animales"></div>
+
+      <nav id="paginacion-catalogo" aria-label="Paginación del catálogo" hidden>
+        <button id="pagina-anterior" class="secundario" type="button">Anterior</button>
+        <span id="info-pagina"></span>
+        <button id="pagina-siguiente" class="secundario" type="button">Siguiente</button>
+      </nav>
+
+      <button id="recargar" type="button" hidden>Reintentar carga</button>
+    </section>
+
+    <section id="solicitud" hidden>
+      <button id="volver" class="secundario" type="button">Volver al catálogo</button>
+      <h1 id="titulo" tabindex="-1">Solicitud de adopción</h1>
+      <p>Animal seleccionado <strong id="animal"></strong></p>
+      <form id="postulacion">
+        <fieldset>
+          <legend>Datos obligatorios del hogar</legend>
+          <div class="campos">
+            <label>Tipo de vivienda
+              <select name="viviendaTipo" required>
+                <option value="">Selecciona una opción</option>
+                <option value="casa">Casa</option>
+                <option value="departamento">Departamento</option>
+                <option value="otra">Otra</option>
+              </select>
+            </label>
+            <label>¿Tienes patio o espacio exterior?
+              <select name="tienePatio" required><option value="">Selecciona</option><option value="si">Sí</option><option value="no">No</option></select>
+            </label>
+            <label>¿Hay niños en el hogar?
+              <select name="hayNinos" required><option value="">Selecciona</option><option value="si">Sí</option><option value="no">No</option></select>
+            </label>
+            <label>¿Tienes otras mascotas?
+              <select name="tieneOtrasMascotas" required><option value="">Selecciona</option><option value="si">Sí</option><option value="no">No</option></select>
+            </label>
+          </div>
+          <label>Motivo de adopción <textarea name="motivoAdopcion" rows="4" required></textarea></label>
+          <label class="consentimiento"><input name="consentimientoCohabitantes" type="checkbox" required>
+            <span>Declaro que las personas mayores de edad que viven conmigo han dado su consentimiento explícito para esta solicitud (Ley 21.719).</span>
+          </label>
+        </fieldset>
+        <button>Enviar solicitud</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

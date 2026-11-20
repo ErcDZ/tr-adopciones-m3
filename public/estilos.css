@@ -1,0 +1,28 @@
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: #f4f6f2; color: #172c23; font: 1rem/1.55 system-ui, sans-serif; }
+.marco { width: min(100% - 2rem, 49rem); margin-inline: auto; }
+header { background: #173a30; color: white; }
+header .marco { min-height: 4rem; display: flex; gap: 1rem; align-items: center; justify-content: space-between; }
+header a { color: inherit; font-weight: 700; text-decoration: none; }
+main { padding-block: 2rem 4rem; }
+section { background: white; padding: clamp(1rem, 4vw, 2.25rem); border: 1px solid #d8e2d9; border-radius: 1rem; }
+h1 { font-size: clamp(1.6rem, 5vw, 2.25rem); line-height: 1.15; margin-block: 0 1rem; }
+button, input, select, textarea { font: inherit; }
+button { background: #195541; color: white; padding: .65rem 1rem; border: 1px solid transparent; border-radius: .5rem; cursor: pointer; font-weight: 650; }
+button:disabled { opacity: .6; cursor: wait; }
+button.secundario { color: #195541; background: transparent; border-color: #a1baaa; margin-bottom: 1.25rem; }
+:focus-visible { outline: 3px solid #237762; outline-offset: 3px; }
+label { display: grid; gap: .35rem; margin-bottom: 1rem; font-weight: 600; }
+input:not([type="checkbox"]), select, textarea { width: 100%; background: white; color: inherit; border: 1px solid #788e80; border-radius: .45rem; padding: .6rem; }
+textarea { resize: vertical; }
+fieldset { border: 0; margin: 0; padding: 0; min-inline-size: 0; }
+legend { font-size: 1.1rem; font-weight: 700; margin-block: .6rem 1rem; }
+.campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 0 1rem; }
+.consentimiento { display: flex; align-items: flex-start; background: #edf4ee; padding: .9rem; border-radius: .5rem; font-weight: 500; }
+.consentimiento input { flex: none; margin: .3rem .5rem 0 0; width: 1.1rem; height: 1.1rem; accent-color: #195541; }
+#aviso, #resultado { padding: .8rem 1rem; border-radius: .5rem; }
+#aviso { background: #fce9e4; color: #761e10; }
+#resultado { background: #dff1e4; }
+#animales { display: grid; gap: .75rem; }
+article { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .8rem; border: 1px solid #d8e2d9; border-radius: .5rem; }
