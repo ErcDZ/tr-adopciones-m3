@@ -6,7 +6,7 @@ const MAX_LIMIT = 100;
 
 export const RUTA_ANIMALES_DISPONIBLES = '/api/adopciones/animales-disponibles';
 
-function enterPositivo(valor, defecto) {
+function enteroPositivo(valor, defecto) {
   if (valor === undefined || valor === null || String(valor).trim() === '') {
     return defecto;
   }
@@ -29,32 +29,36 @@ function esAnimalDisponible(item) {
   const id = item.animalID ?? item.animalId;
   const estado = typeof item.estado === 'string' ? item.estado.trim().toLowerCase() : '';
   const estaFallecido = item.fallecido === true || estado === 'fallecido';
-  const estaAdoptado =
+  const noDisponible =
     item.adoptado === true ||
     item.disponible === false ||
     item.disponibleAdopcion === false ||
     ['adoptado', 'no_disponible', 'registrado'].includes(estado);
 
-  if (!id || estaFallecido || estaAdoptado) return false;
+  if (!id || estaFallecido || noDisponible) return false;
   if (estado && ESTADOS_ANIMAL.includes(estado) && !APTOS.includes(estado)) return false;
-  if (!item.microchip && !item.microship) return false;
+
+  const codigoMicroship = item.microship ?? item.microchip;
+  if (typeof codigoMicroship !== 'string' ? !codigoMicroship : !codigoMicroship.trim()) {
+    return false;
+  }
 
   return true;
 }
 
 function normalizarAnimal(item) {
   return {
-    animalID: String(item.animalID ?? item.animalId),
-    especie: item.especie ?? '',
-    nombre: item.nombre ?? '',
-    microship: String(item.microship ?? item.microchip ?? ''),
+    animalID: String(item.animalID ?? item.animalId).trim(),
+    especie: typeof item.especie === 'string' ? item.especie.trim() : '',
+    nombre: typeof item.nombre === 'string' ? item.nombre.trim() : '',
+    microship: String(item.microship ?? item.microchip ?? '').trim(),
   };
 }
 
 export function listarAnimalesDisponibles({ consultarRegistro, tokenRegistro, error }) {
   return async (req, res) => {
-    const page = enterPositivo(req.query?.page, DEFAULT_PAGE);
-    const limit = enterPositivo(req.query?.limit, DEFAULT_LIMIT);
+    const page = enteroPositivo(req.query?.page, DEFAULT_PAGE);
+    const limit = enteroPositivo(req.query?.limit, DEFAULT_LIMIT);
 
     if (!page || !limit || limit > MAX_LIMIT) {
       return error(

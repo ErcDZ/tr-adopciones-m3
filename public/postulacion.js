@@ -8,9 +8,22 @@ const aviso = porId('aviso');
 const resultado = porId('resultado');
 const salir = porId('salir');
 const recargar = porId('recargar');
+const estadoCatalogo = porId('estado-catalogo');
+const formFiltros = porId('filtros-catalogo');
+const inputEspecie = porId('filtro-especie');
+const selectLimit = porId('filtro-limit');
+const botonLimpiar = porId('limpiar-filtros');
+const navPaginacion = porId('paginacion-catalogo');
+const botonAnterior = porId('pagina-anterior');
+const botonSiguiente = porId('pagina-siguiente');
+const infoPagina = porId('info-pagina');
+
 let token;
 let postulanteRut;
 let animalID;
+let paginaActual = 1;
+let limiteActual = 10;
+let especieActual = '';
 
 const conflictos = new Map([
   ['LIMITE_POSTULACIONES', 'Ya tienes el máximo de dos postulaciones.'],
@@ -42,13 +55,23 @@ function mensaje(cuerpo, alternativa) {
   return typeof detalle === 'string' && detalle.trim() ? detalle : alternativa;
 }
 
+function reiniciarFiltros() {
+  paginaActual = 1;
+  limiteActual = 10;
+  especieActual = '';
+  inputEspecie.value = '';
+  selectLimit.value = '10';
+}
+
 function cerrarSesion(texto) {
   token = undefined;
   postulanteRut = undefined;
   animalID = undefined;
+  reiniciarFiltros();
   formulario.reset();
-  catalogo.hidden = solicitud.hidden = salir.hidden = true;
+  catalogo.hidden = solicitud.hidden = salir.hidden = navPaginacion.hidden = true;
   inicio.hidden = false;
+  mostrar(estadoCatalogo);
   mostrar(resultado);
   mostrar(aviso, texto);
 }
@@ -56,37 +79,125 @@ function cerrarSesion(texto) {
 salir.addEventListener('click', () => cerrarSesion());
 recargar.addEventListener('click', cargarCatalogo);
 
+function construirUrlCatalogo() {
+  const params = new URLSearchParams();
+  params.set('page', String(paginaActual));
+  params.set('limit', String(limiteActual));
+  if (especieActual) {
+    params.set('especie', especieActual);
+  }
+  return `/api/adopciones/animales-disponibles?${params.toString()}`;
+}
+
+function actualizarPaginacion(page, limit, total) {
+  const totalPaginas = Math.max(1, Math.ceil(total / limit));
+  const sinResultados = total === 0;
+  navPaginacion.hidden = sinResultados;
+  if (sinResultados) return;
+
+  infoPagina.textContent = `Página ${page} de ${totalPaginas} (Total: ${total})`;
+  botonAnterior.disabled = page <= 1;
+  botonSiguiente.disabled = page >= totalPaginas;
+}
+
 async function cargarCatalogo() {
   const activo = token;
   const animales = porId('animales');
   animales.replaceChildren();
+  navPaginacion.hidden = true;
   recargar.hidden = true;
   mostrar(aviso);
+  mostrar(estadoCatalogo, 'Cargando animales disponibles...');
+
   try {
-    const { estado, cuerpo } = await api('/api/adopciones/catalogo', { bearer: activo });
+    const { estado, cuerpo } = await api(construirUrlCatalogo(), { bearer: activo });
     if (activo !== token) return;
+    mostrar(estadoCatalogo);
+
     if (estado === 401) return cerrarSesion('Tu sesión expiró. Inicia sesión nuevamente.');
     if (estado !== 200 || !Array.isArray(cuerpo?.datos)) throw new Error();
-    const disponibles = cuerpo.datos.filter(animal => typeof animal?.animalID === 'string' && animal.animalID.trim());
-    if (disponibles.length === 0) animales.textContent = 'No hay animales disponibles.';
+
+    const total = Number.isInteger(cuerpo.total) ? cuerpo.total : cuerpo.datos.length;
+    const page = Number.isInteger(cuerpo.page) ? cuerpo.page : paginaActual;
+    const limit = Number.isInteger(cuerpo.limit) ? cuerpo.limit : limiteActual;
+    paginaActual = page;
+    limiteActual = limit;
+
+    const disponibles = cuerpo.datos.filter(
+      animal => typeof animal?.animalID === 'string' && animal.animalID.trim()
+    );
+
+    if (disponibles.length === 0) {
+      mostrar(estadoCatalogo, 'No hay animales disponibles para mostrar.');
+      actualizarPaginacion(page, limit, 0);
+      return;
+    }
+
     for (const animal of disponibles) {
+      const id = animal.animalID.trim();
+      const nombreTexto = animal.nombre || id;
+      const especieTexto = animal.especie || 'No especificada';
+      const microshipTexto = animal.microship || animal.microchip || 'Sin microship';
+
       const fila = document.createElement('article');
-      const nombre = document.createElement('strong');
-      nombre.textContent = animal.nombre || animal.animalID;
+
+      const tituloAnimal = document.createElement('strong');
+      tituloAnimal.textContent = `${nombreTexto} (${id})`;
+
+      const detalle = document.createElement('p');
+      detalle.textContent = `Especie: ${especieTexto} · Microship: ${microshipTexto}`;
+
       const boton = document.createElement('button');
       boton.type = 'button';
-      boton.textContent = 'Solicitar adopción';
-      boton.setAttribute('aria-label', `Solicitar adopción de ${nombre.textContent}`);
-      boton.addEventListener('click', () => elegirAnimal(animal.animalID, nombre.textContent));
-      fila.append(nombre, boton);
+      boton.textContent = 'Postular';
+      boton.setAttribute('aria-label', `Postular a ${nombreTexto} (${id})`);
+      boton.addEventListener('click', () => elegirAnimal(id, nombreTexto));
+
+      fila.append(tituloAnimal, detalle, boton);
       animales.append(fila);
     }
+
+    actualizarPaginacion(page, limit, total);
   } catch {
     if (activo !== token) return;
+    mostrar(estadoCatalogo);
     mostrar(aviso, 'No pudimos cargar el catálogo. Intenta nuevamente.');
     recargar.hidden = false;
   }
 }
+
+formFiltros.addEventListener('submit', evento => {
+  evento.preventDefault();
+  especieActual = inputEspecie.value.trim();
+  limiteActual = Number.parseInt(selectLimit.value, 10) || 10;
+  paginaActual = 1;
+  cargarCatalogo();
+});
+
+selectLimit.addEventListener('change', () => {
+  limiteActual = Number.parseInt(selectLimit.value, 10) || 10;
+  paginaActual = 1;
+  cargarCatalogo();
+});
+
+botonLimpiar.addEventListener('click', () => {
+  especieActual = '';
+  inputEspecie.value = '';
+  paginaActual = 1;
+  cargarCatalogo();
+});
+
+botonAnterior.addEventListener('click', () => {
+  if (paginaActual > 1) {
+    paginaActual -= 1;
+    cargarCatalogo();
+  }
+});
+
+botonSiguiente.addEventListener('click', () => {
+  paginaActual += 1;
+  cargarCatalogo();
+});
 
 function elegirAnimal(id, nombre) {
   if (!token) return;
@@ -126,6 +237,7 @@ sesion.addEventListener('submit', async evento => {
     }
     token = login.cuerpo.token;
     postulanteRut = validacion.cuerpo.rut;
+    reiniciarFiltros();
     inicio.hidden = true;
     salir.hidden = catalogo.hidden = false;
     await cargarCatalogo();
