@@ -17,7 +17,7 @@ export async function crearRepositorioPostulaciones(cliente) {
   await postulaciones.createIndex({ postulanteRut: 1, estado: 1 });
   await postulaciones.createIndex({ animalID: 1, estado: 1 });
 
-  // REGISTRAR POSTULACIONES (SPRINT 3)
+  // GUARDAR POSTULACIONES
   async function guardar(datos) {
     const rut = datos.postulanteRut;
 
@@ -49,7 +49,10 @@ export async function crearRepositorioPostulaciones(cliente) {
         }
 
         const total = await postulaciones.countDocuments(
-          { postulanteRut: rut, estado: { $in: ACTIVAS } },
+          {
+            postulanteRut: rut,
+            estado: { $in: ACTIVAS }
+          },
           { session: sesion, limit: 2 }
         );
 
@@ -79,7 +82,7 @@ export async function crearRepositorioPostulaciones(cliente) {
     );
   }
 
-  // LISTAR POSTULACIONES DE UN VECINO (SPRINT 3)
+  // LISTADO DE POSTULACIONES DEL VECINO
   guardar.listar = async (rut, pagina = 1, limite = 10) => {
     const filtro = { postulanteRut: rut };
 
@@ -97,7 +100,23 @@ export async function crearRepositorioPostulaciones(cliente) {
     return { datos, total, pagina, limite };
   };
 
-  // BUSCAR POSTULACION POR ID (SPRINT 3)
+  // TAREA 60: LISTADO GLOBAL PARA FUNCIONARIOS
+  guardar.listarTodas = async (pagina = 1, limite = 10) => {
+    const total = await postulaciones.countDocuments({});
+
+    const datos = await postulaciones.find(
+      {},
+      { projection: { _id: 0 } }
+    )
+      .sort({ fechaCreacion: -1 })
+      .skip((pagina - 1) * limite)
+      .limit(limite)
+      .toArray();
+
+    return { datos, total, pagina, limite };
+  };
+
+  // CONSULTAR POSTULACION POR ID
   guardar.buscarPorId = async id => {
     if (typeof id !== 'string' || !/^[0-9a-f]{24}$/i.test(id)) {
       return null;
@@ -109,14 +128,13 @@ export async function crearRepositorioPostulaciones(cliente) {
     );
   };
 
-  // TAREA 59: CAMBIAR ESTADO DE UNA POSTULACION
+  // TAREA 59: CAMBIAR ESTADO
   guardar.cambiarEstado = async (id, nuevoEstado, observaciones, funcionarioRut) => {
     if (typeof id !== 'string' || !/^[0-9a-f]{24}$/i.test(id)) {
       return { noExiste: true };
     }
 
     const objetoId = new ObjectId(id);
-
     const inicial = await postulaciones.findOne({ _id: objetoId });
 
     if (!inicial) {
@@ -125,7 +143,6 @@ export async function crearRepositorioPostulaciones(cliente) {
 
     const animalID = inicial.animalID;
 
-    // Coordinar cambios simultáneos del mismo animal
     try {
       await controlesAnimales.updateOne(
         { _id: animalID },
@@ -153,7 +170,6 @@ export async function crearRepositorioPostulaciones(cliente) {
           return { noExiste: true };
         }
 
-        // Solo se permiten estas transiciones
         const transiciones = {
           recibida: ['en_evaluación'],
           en_evaluación: ['aprobada', 'rechazada']
@@ -165,7 +181,6 @@ export async function crearRepositorioPostulaciones(cliente) {
           return { conflicto: 'TRANSICION_INVALIDA' };
         }
 
-        // Evitar aprobar dos postulaciones del mismo animal
         if (nuevoEstado === 'aprobada') {
           const aprobada = await postulaciones.findOne(
             {
@@ -198,7 +213,7 @@ export async function crearRepositorioPostulaciones(cliente) {
 
         let canceladas = 0;
 
-        // RN-07: CANCELAR POSTULACIONES PARALELAS
+        // RN-07: CANCELACION AUTOMATICA
         if (nuevoEstado === 'aprobada') {
           const resultado = await postulaciones.updateMany(
             {
