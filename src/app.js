@@ -25,13 +25,19 @@ function tieneIdentidad(datos) {
 function requierePerfil(...perfiles) {
   return (req, res, next) => {
     if (!perfiles.includes(req.usuario.perfil)) {
-      return error(res, 403, 'PERFIL_NO_AUTORIZADO', 'Tu perfil no tiene permiso para esta ruta');
+      return error(res, 403, 'PERFIL_NO_AUTORIZADO', 'No tienes permiso para esta ruta');
     }
     next();
   };
 }
 
-export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUrl, tokenRegistro, guardarPostulacion }) {
+export function crearApp({
+  nucleoUrl,
+  timeoutMs = 35000,
+  registroUrl = nucleoUrl,
+  tokenRegistro,
+  guardarPostulacion
+}) {
   const consultarNucleo = crearClienteNucleo(nucleoUrl, timeoutMs);
   const consultarRegistro = crearClienteNucleo(registroUrl, timeoutMs);
   const app = express();
@@ -50,7 +56,7 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
     const { estado, datos } = await consultarNucleo(SESIONES, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rut, clave }),
+      body: JSON.stringify({ rut, clave })
     });
 
     if (estado === 401) {
@@ -58,7 +64,7 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
     }
 
     if (estado === 400 && datos?.error?.codigo === 'RUT_INVALIDO') {
-      return error(res, 400, 'RUT_INVALIDO', 'Usa un RUT sin puntos, con guión y dígito verificador válido');
+      return error(res, 400, 'RUT_INVALIDO', 'El RUT no es válido');
     }
 
     if (estado !== 201 || !tieneIdentidad(datos) ||
@@ -69,11 +75,17 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
 
     const { token, rut: rutConfirmado, perfil, nombre, expira } = datos;
 
-    return res.set('Cache-Control', 'no-store').status(201)
-      .json({ token, rut: rutConfirmado, perfil, nombre, expira });
+    return res.set('Cache-Control', 'no-store')
+      .status(201).json({
+        token,
+        rut: rutConfirmado,
+        perfil,
+        nombre,
+        expira
+      });
   });
 
-  // VALIDAR TOKEN CON EL NUCLEO
+  // AUTENTICACION CON EL NUCLEO
   async function autenticar(req, res, next) {
     const authorization = req.get('Authorization');
 
@@ -82,15 +94,15 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
     }
 
     if (!/^Bearer +[A-Za-z0-9._~+\/-]+=*$/i.test(authorization)) {
-      return error(res, 401, 'TOKEN_INVALIDO', 'El encabezado Bearer no es válido');
+      return error(res, 401, 'TOKEN_INVALIDO', 'El token no es válido');
     }
 
     const { estado, datos } = await consultarNucleo(`${SESIONES}/actual`, {
-      headers: { Authorization: authorization },
+      headers: { Authorization: authorization }
     });
 
     if (estado === 401) {
-      return error(res, 401, 'TOKEN_INVALIDO', 'El token no es válido o expiró');
+      return error(res, 401, 'TOKEN_INVALIDO', 'El token expiró o no es válido');
     }
 
     if (estado !== 200 || !tieneIdentidad(datos)) {
@@ -111,7 +123,7 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
   app.get('/api/adopciones/acceso/funcionario',
     autenticar, requierePerfil('funcionario'), responderUsuario);
 
-  // REGISTRAR UNA POSTULACION
+  // CREAR POSTULACION
   app.post(RUTA_POSTULACIONES,
     autenticar,
     requierePerfil('vecino'),
@@ -121,11 +133,11 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
       consultarRegistro,
       tokenRegistro,
       guardar: guardarPostulacion,
-      error,
+      error
     })
   );
 
-  // TAREA 54: LISTAR POSTULACIONES DEL PROPIO RUT
+  // LISTAR POSTULACIONES DE UN VECINO
   app.get(RUTA_POSTULACIONES,
     autenticar,
     requierePerfil('vecino'),
@@ -137,7 +149,6 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
         return error(res, 400, 'DATO_INVALIDO', 'Debes indicar postulanteRut');
       }
 
-      // Bloqueamos las consultas a otro RUT
       if (rutSolicitado.toUpperCase() !== rutToken) {
         return error(res, 403, 'ACCESO_DENEGADO',
           'No puedes consultar postulaciones de otro usuario');
@@ -162,7 +173,7 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
           datos: resultado.datos,
           total: resultado.total,
           page: resultado.pagina,
-          limit: resultado.limite,
+          limit: resultado.limite
         });
       } catch {
         return error(res, 503, 'SERVICIO_NO_DISPONIBLE',
@@ -171,7 +182,7 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
     }
   );
 
-  // TAREA 54: CONSULTAR UNA POSTULACION POR SU ID
+  // CONSULTAR POSTULACION POR ID
   app.get(`${RUTA_POSTULACIONES}/:postulacionId`,
     autenticar,
     requierePerfil('vecino'),
@@ -196,7 +207,6 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
             'La postulación no existe');
         }
 
-        // Comparamos el dueño de la postulación con el token
         if (postulacion.postulanteRut?.toUpperCase() !==
             req.usuario.rut.toUpperCase()) {
           return error(res, 403, 'ACCESO_DENEGADO',
@@ -212,10 +222,81 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
     }
   );
 
+  // TAREA 59: FUNCIONARIO CAMBIA EL ESTADO DE UNA POSTULACION
+  app.patch(`${RUTA_POSTULACIONES}/:postulacionId`,
+    autenticar,
+    requierePerfil('funcionario'),
+    express.json(),
+    async (req, res) => {
+      const id = req.params.postulacionId;
+      const { estado, observaciones } = req.body ?? {};
+
+      // Comprobar identificador
+      if (!/^[0-9a-f]{24}$/i.test(id)) {
+        return error(res, 404, 'POSTULACION_NO_ENCONTRADA',
+          'La postulación no existe');
+      }
+
+      // Comprobar nuevo estado
+      const permitidos = ['en_evaluación', 'aprobada', 'rechazada'];
+
+      if (!permitidos.includes(estado)) {
+        return error(res, 400, 'DATO_INVALIDO',
+          'El estado solicitado no es válido');
+      }
+
+      // Observaciones obligatorias
+      if (typeof observaciones !== 'string' ||
+          !observaciones.trim() || observaciones.length > 1000) {
+        return error(res, 400, 'DATO_INVALIDO',
+          'Debes ingresar observaciones válidas');
+      }
+
+      if (!guardarPostulacion?.cambiarEstado) {
+        return error(res, 503, 'SERVICIO_NO_DISPONIBLE',
+          'MongoDB no está disponible');
+      }
+
+      try {
+        const resultado = await guardarPostulacion.cambiarEstado(
+          id,
+          estado,
+          observaciones.trim(),
+          req.usuario.rut
+        );
+
+        if (resultado.noExiste) {
+          return error(res, 404, 'POSTULACION_NO_ENCONTRADA',
+            'La postulación no existe');
+        }
+
+        if (resultado.conflicto === 'TRANSICION_INVALIDA') {
+          return error(res, 409, 'TRANSICION_INVALIDA',
+            'No puedes realizar ese cambio de estado');
+        }
+
+        if (resultado.conflicto === 'ANIMAL_YA_ADOPTADO') {
+          return error(res, 409, 'ANIMAL_YA_ADOPTADO',
+            'Este animal ya tiene una postulación aprobada');
+        }
+
+        return res.set('Cache-Control', 'no-store').status(200).json({
+          datos: resultado.documento,
+          canceladas: resultado.canceladas
+        });
+      } catch {
+        return error(res, 503, 'SERVICIO_NO_DISPONIBLE',
+          'No se pudo actualizar la postulación');
+      }
+    }
+  );
+
+  // RUTAS NO EXISTENTES
   app.use((req, res) =>
     error(res, 404, 'RUTA_NO_ENCONTRADA', 'La ruta no existe')
   );
 
+  // CONTROL DE ERRORES
   app.use((fallo, req, res, next) => {
     if (res.headersSent) return next(fallo);
 
