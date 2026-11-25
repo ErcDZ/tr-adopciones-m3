@@ -4,39 +4,39 @@
     "grupo": 3,
     "modulo": 3,
     "repositorio": "tr-adopciones-m3",
-    "urlNube": "https://TU-SERVICIO-EN-LA-NUBE.onrender.com",
-    "wikiContratoApi": "URL_DE_TU_PAGINA_EN_TAIGA_WIKI"
+    "urlNube": "",
+    "wikiContratoApi": "https://tree.taiga.io/project/bastianmadariaga-ti3034-d-iei-n4-p2-c2e-f-m3/wiki/contrato-de-api"
   },
   "integrantes": [
     {
-      "nombre": "Integrante 1",
-      "github": "usuario_github_1",
-      "taiga": "usuario_taiga_1",
-      "rolRotado": "ROL_1"
+      "nombre": "Eric González",
+      "github": "ErcDZ",
+      "taiga": "Eric Gonzalez",
+      "rolRotado": "Scrum Master"
     },
     {
-      "nombre": "Integrante 2",
-      "github": "usuario_github_2",
-      "taiga": "usuario_taiga_2",
-      "rolRotado": "ROL_2"
+      "nombre": "Bastian Madariaga",
+      "github": "bastianmanuel00-collab",
+      "taiga": "Bastian Madariaga",
+      "rolRotado": "Calidad, Scrum Master"
     },
     {
-      "nombre": "Integrante 3",
-      "github": "usuario_github_3",
-      "taiga": "usuario_taiga_3",
-      "rolRotado": "ROL_3"
+      "nombre": "Cesar Urra",
+      "github": "cesarurra",
+      "taiga": "cesar andres urra zambrano",
+      "rolRotado": "Desarrollo"
     },
     {
-      "nombre": "Integrante 4",
-      "github": "usuario_github_4",
-      "taiga": "usuario_taiga_4",
-      "rolRotado": "ROL_4"
+      "nombre": "Ignacio Rivera",
+      "github": "IgnacioRivera33",
+      "taiga": "Ignacio Rivera Martinez",
+      "rolRotado": "Desarrollo"
     },
     {
-      "nombre": "Integrante 5",
-      "github": "usuario_github_5",
-      "taiga": "usuario_github_5",
-      "rolRotado": "ROL_5"
+      "nombre": "Kristobal Ledezma",
+      "github": "kristobal205-debug",
+      "taiga": "kristobal",
+      "rolRotado": "Desarrollo"
     }
   ],
   "verificaciones": [
