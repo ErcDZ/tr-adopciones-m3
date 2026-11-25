@@ -1,0 +1,89 @@
+{
+  "proyecto": {
+    "codigo": "TI3043/D-IEI-N4-P2-C2(E-F)/D",
+    "grupo": 3,
+    "modulo": 3,
+    "repositorio": "tr-adopciones-m3",
+    "urlNube": "https://TU-SERVICIO-EN-LA-NUBE.onrender.com",
+    "wikiContratoApi": "URL_DE_TU_PAGINA_EN_TAIGA_WIKI"
+  },
+  "integrantes": [
+    {
+      "nombre": "Integrante 1",
+      "github": "usuario_github_1",
+      "taiga": "usuario_taiga_1",
+      "rolRotado": "ROL_1"
+    },
+    {
+      "nombre": "Integrante 2",
+      "github": "usuario_github_2",
+      "taiga": "usuario_taiga_2",
+      "rolRotado": "ROL_2"
+    },
+    {
+      "nombre": "Integrante 3",
+      "github": "usuario_github_3",
+      "taiga": "usuario_taiga_3",
+      "rolRotado": "ROL_3"
+    },
+    {
+      "nombre": "Integrante 4",
+      "github": "usuario_github_4",
+      "taiga": "usuario_taiga_4",
+      "rolRotado": "ROL_4"
+    },
+    {
+      "nombre": "Integrante 5",
+      "github": "usuario_github_5",
+      "taiga": "usuario_github_5",
+      "rolRotado": "ROL_5"
+    }
+  ],
+  "verificaciones": [
+    {
+      "historia": "HU-01",
+      "descripcion": "Consulta de animales disponibles para adopción",
+      "metodo": "GET",
+      "url": "https://TU-SERVICIO-EN-LA-NUBE.onrender.com/api/adopciones/animales-disponibles?page=1&limit=10",
+      "requiereAuth": true,
+      "perfilPrueba": "vecino",
+      "codigoHttpEsperado": 200
+    },
+    {
+      "historia": "HU-02",
+      "descripcion": "Verificación de la historia HU-02 en el servicio desplegado",
+      "metodo": "GET",
+      "url": "https://TU-SERVICIO-EN-LA-NUBE.onrender.com/RUTA_HU_02",
+      "requiereAuth": true,
+      "perfilPrueba": "vecino",
+      "codigoHttpEsperado": 200
+    },
+    {
+      "historia": "HU-03",
+      "descripcion": "Verificación de la historia HU-03 en el servicio desplegado",
+      "metodo": "GET",
+      "url": "https://TU-SERVICIO-EN-LA-NUBE.onrender.com/RUTA_HU_03",
+      "requiereAuth": true,
+      "perfilPrueba": "vecino",
+      "codigoHttpEsperado": 200
+    },
+    {
+      "historia": "HU-04",
+      "descripcion": "Postulación / gestión de postulaciones o aprobación con cascada (HU-04.3)",
+      "metodo": "PATCH",
+      "url": "https://TU-SERVICIO-EN-LA-NUBE.onrender.com/api/adopciones/postulaciones/POST_ID_PRUEBA",
+      "requiereAuth": true,
+      "perfilPrueba": "funcionario",
+      "codigoHttpEsperado": 200
+    },
+    {
+      "historia": "HU-05",
+      "descripcion": "Verificación de la historia HU-05 en el servicio desplegado",
+      "metodo": "GET",
+      "url": "https://TU-SERVICIO-EN-LA-NUBE.onrender.com/RUTA_HU_05",
+      "requiereAuth": true,
+      "perfilPrueba": "vecino",
+      "codigoHttpEsperado": 200
+    }
+  ]
+}
