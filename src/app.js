@@ -111,7 +111,7 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
   app.patch(             // Linea 111
   RUTA_POSTULACION_DETALLE,
   autenticar,
-  (req, res, next) => { // Validacion del rol comienza aqui
+  (req, res, next) => { // Validacion del rol comienza aqui (Linea 114)
     if (req.usuario.perfil !== 'funcionario') {
       return error(res, 403, 'ACCESO_DENEGADO', 'Solo un funcionario puede aprobar postulaciones');
     }
