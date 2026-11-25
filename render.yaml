@@ -1,0 +1,24 @@
+# Blueprint de Render: servicio web conectado a GitHub con despliegue continuo.
+# Los valores marcados con sync: false se escriben en el panel de Render, nunca en este archivo.
+services:
+  - type: web
+    name: tr-adopciones-m3
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /salud
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NUCLEO_TIMEOUT_MS
+        value: "35000"
+      - key: NUCLEO_URL
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: M1_URL
+        sync: false
+      - key: M1_TOKEN
+        sync: false
