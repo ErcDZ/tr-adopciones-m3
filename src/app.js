@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { crearClienteNucleo } from './nucleo.js';
 import { crearPostulacion, RUTA_POSTULACIONES } from './postulaciones.js';
 import { listarAnimalesDisponibles, RUTA_ANIMALES_DISPONIBLES } from './animales.js';
+import { aprobarYCancelarParalelas, RUTA_POSTULACION_DETALLE } from './cancelacion-paralelas.js';
 
 const SESIONES = '/api/nucleo/sesiones';
 
@@ -31,7 +32,7 @@ function requierePerfil(...perfiles) {
   };
 }
 
-export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUrl, tokenRegistro, guardarPostulacion }) {
+export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUrl, tokenRegistro, guardarPostulacion, operacionesAdopcion }) {
   const consultarNucleo = crearClienteNucleo(nucleoUrl, timeoutMs);
   const consultarRegistro = crearClienteNucleo(registroUrl, timeoutMs);
   const app = express();
@@ -102,6 +103,23 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
     requierePerfil('vecino', 'funcionario'),
     listarAnimalesDisponibles({ consultarRegistro, tokenRegistro, error })
   );
+
+
+
+
+
+  app.patch(             // Linea 111
+  RUTA_POSTULACION_DETALLE,
+  autenticar,
+  (req, res, next) => { // Validacion del rol comienza aqui
+    if (req.usuario.perfil !== 'funcionario') {
+      return error(res, 403, 'ACCESO_DENEGADO', 'Solo un funcionario puede aprobar postulaciones');
+    }
+    next();
+  },
+  express.json(),
+  aprobarYCancelarParalelas({ operaciones: operacionesAdopcion, error })
+);
 
   app.use((req, res) => error(res, 404, 'RUTA_NO_ENCONTRADA', 'La ruta no existe'));
 

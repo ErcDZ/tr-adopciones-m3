@@ -105,3 +105,22 @@ Configura `MONGODB_URI` en el entorno local con un replica set o un clúster de 
 | `503` | Una dependencia no permite completar la verificación o falta configurar MongoDB. |
 
 MongoDB utiliza un índice único de RUT y animal para impedir duplicados en cualquier estado. La transacción actualiza primero un documento de control por RUT y después cuenta las postulaciones `recibida` y `en_evaluación`. Las solicitudes simultáneas del mismo RUT compiten por el mismo control, por lo que una transacción reintenta con un conteo actualizado. Los futuros cambios de estado que vuelvan a activar una postulación deberán aplicar la misma coordinación.
+
+## Aprobación de postulación y cancelación de paralelas (HU-04.3)
+
+`PATCH /api/adopciones/postulaciones/:postulacionId` requiere autenticación Bearer válida y perfil `funcionario`. Aprueba la postulación indicada y cancela en cascada las postulaciones paralelas pendientes del mismo `animalID` dentro de una transacción en `tr_adopciones.postulaciones`, sin modificar postulaciones de otros animales.
+
+| HTTP | Código / Motivo |
+| --- | --- |
+| `200` | Postulación aprobada y paralelas del mismo animal canceladas. |
+| `401` | Token ausente o inválido. |
+| `403` | `ACCESO_DENEGADO` si el perfil autenticado no es `funcionario`. |
+| `404` | `POSTULACION_NO_ENCONTRADA` si el identificador no existe. |
+
+## Controles de seguridad (OWASP)
+
+| Categoría OWASP | Control aplicado | Ubicación en código | Verificación |
+| --- | --- | --- | --- |
+| Broken Access Control | Verificación de sesión y rol `funcionario` antes de ejecutar la aprobación (`403 ACCESO_DENEGADO` para `vecino`). | `src/app.js` (líneas 111–119) y `requierePerfil` | `npm test` |
+| Broken Authentication | Validación de encabezado `Bearer` y consulta de sesión activa en el núcleo (`401 TOKEN_REQUERIDO` / `TOKEN_INVALIDO`). | `src/app.js` y `src/nucleo.js` | `npm test` |
+| Security Misconfiguration | Cabecera `X-Powered-By` deshabilitada, `Cache-Control: no-store` en sesión y manejo de `400 JSON_INVALIDO` / `413 CUERPO_DEMASIADO_GRANDE` / `500 ERROR_INTERNO`. | `src/app.js` | `npm test` |
