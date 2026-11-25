@@ -2,7 +2,7 @@ import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { crearClienteNucleo } from './nucleo.js';
 import { crearPostulacion, RUTA_POSTULACIONES } from './postulaciones.js';
-import { listarCatalogo, RUTA_CATALOGO, validarConsultaCatalogo } from './catalogo.js';
+import { concretarAdopcion, RUTA_POSTULACION } from './adopcion-concretada.js';
 
 const SESIONES = '/api/nucleo/sesiones';
 
@@ -31,7 +31,7 @@ function requierePerfil(...perfiles) {
   };
 }
 
-export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUrl, tokenRegistro, guardarPostulacion }) {
+export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUrl, tokenRegistro, guardarPostulacion, operacionesAdopcion }) {
   const consultarNucleo = crearClienteNucleo(nucleoUrl, timeoutMs);
   const consultarRegistro = crearClienteNucleo(registroUrl, timeoutMs);
   const app = express();
@@ -95,9 +95,9 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
   app.post(RUTA_POSTULACIONES, autenticar, requierePerfil('vecino'), express.json(), crearPostulacion({
     consultarNucleo, consultarRegistro, tokenRegistro, guardar: guardarPostulacion, error,
   }));
-
-  app.get(RUTA_CATALOGO, autenticar, requierePerfil('vecino'), validarConsultaCatalogo({ error }),
-    listarCatalogo({ consultarRegistro, tokenRegistro, error }));
+  app.patch(RUTA_POSTULACION, autenticar, requierePerfil('funcionario'), express.json(), concretarAdopcion({
+    consultarRegistro, tokenRegistro, operaciones: operacionesAdopcion, error,
+  }));
 
   app.use((req, res) => error(res, 404, 'RUTA_NO_ENCONTRADA', 'La ruta no existe'));
 
