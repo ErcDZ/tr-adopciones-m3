@@ -1,0 +1,517 @@
+From 14f863920b5b87a6d4dd41aebcf01c64bc61aeaf Mon Sep 17 00:00:00 2001
+From: Kristobal Ledezma <kristobal@example.com>
+Date: Mon, 23 Nov 2026 15:07:32 +0000
+Subject: [PATCH] =?UTF-8?q?Implementa=20transici=C3=B3n=20aprobada=20?=
+ =?UTF-8?q?=E2=86=92=20adopcion=5Fconcretada=20(RN-08)=20con=20integraci?=
+ =?UTF-8?q?=C3=B3n=20a=20M1?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ README.md                        |  30 ++++
+ src/adopcion-concretada.js       |  97 +++++++++++++
+ src/app.js                       |   6 +-
+ src/repositorio-postulaciones.js |  32 ++++
+ src/server.js                    |   5 +-
+ test/adopcion-concretada.test.js | 242 +++++++++++++++++++++++++++++++
+ 6 files changed, 410 insertions(+), 2 deletions(-)
+ create mode 100644 src/adopcion-concretada.js
+ create mode 100644 test/adopcion-concretada.test.js
+
+diff --git a/README.md b/README.md
+index 3718720..d656438 100644
+--- a/README.md
++++ b/README.md
+@@ -105,3 +105,33 @@ Configura `MONGODB_URI` en el entorno local con un replica set o un clúster de
+ | `503` | Una dependencia no permite completar la verificación o falta configurar MongoDB. |
+ 
+ MongoDB utiliza un índice único de RUT y animal para impedir duplicados en cualquier estado. La transacción actualiza primero un documento de control por RUT y después cuenta las postulaciones `recibida` y `en_evaluación`. Las solicitudes simultáneas del mismo RUT compiten por el mismo control, por lo que una transacción reintenta con un conteo actualizado. Los futuros cambios de estado que vuelvan a activar una postulación deberán aplicar la misma coordinación.
++
++## Concretar la adopción (RN-08)
++
++`PATCH /api/adopciones/postulaciones/{postulacionId}` implementa la transición `aprobada` → `adopcion_concretada`. Acceso: Bearer válido de perfil `funcionario`.
++
++```json
++{ "estado": "adopcion_concretada", "retiroFisicoConfirmado": true, "actaFirmada": true }
++```
++
++Orden de la operación:
++
++1. Valida el identificador, el estado destino y que las dos confirmaciones sean booleanos.
++2. Lee la postulación y exige que esté en `aprobada`.
++3. Exige `retiroFisicoConfirmado` y `actaFirmada` en `true`.
++4. Comprueba que el animal no tenga otra adopción concretada.
++5. Notifica a M1 con `PATCH /api/registro/animales/{animalID}/tutor` y el cuerpo `{ "postulanteRut": "..." }`. Usa `M1_TOKEN` si está configurado; si no, reenvía el token del funcionario.
++6. Solo si M1 responde `200`, confirma el cambio en MongoDB con una actualización condicional (`estado: "aprobada"`). Guarda `estado`, `retiroFisicoConfirmado`, `actaFirmada`, `fechaConcrecion` (UTC ISO 8601) y `concretadaPor`.
++
++Si M1 no responde, devuelve un error o una respuesta que no es JSON, no se escribe nada en MongoDB y la postulación sigue en `aprobada`.
++
++| HTTP | Motivo |
++| --- | --- |
++| `200` | Postulación actualizada a `adopcion_concretada`. |
++| `400` | `ID_INVALIDO`, o `DATOS_INVALIDOS` si falta el estado o las confirmaciones no son booleanos. |
++| `401` / `403` | Token ausente o inválido / perfil distinto de `funcionario`. |
++| `404` | `POSTULACION_NO_ENCONTRADA` o `ANIMAL_NO_ENCONTRADO` (M1 no conoce al animal). |
++| `409` | `TRANSICION_INVALIDA` (no está en `aprobada`, estado destino no admitido o conflicto concurrente), `CONFIRMACION_REQUERIDA` (retiro o acta en `false`) o `ANIMAL_NO_DISPONIBLE`. |
++| `503` | `SERVICIO_NO_DISPONIBLE`: M1 no responde, falla MongoDB o falta configurarlo. |
++
++MongoDB crea un índice único parcial por `animalID` para estados `adopcion_concretada`, de modo que un animal tenga una sola adopción concretada. Si MongoDB falla después de que M1 aceptó el tutor, la respuesta es `503` y la postulación sigue en `aprobada`. El reintento es seguro porque M1 recibe el mismo RUT.
+diff --git a/src/adopcion-concretada.js b/src/adopcion-concretada.js
+new file mode 100644
+index 0000000..aa82535
+--- /dev/null
++++ b/src/adopcion-concretada.js
+@@ -0,0 +1,97 @@
++import { RUTA_POSTULACIONES } from './postulaciones.js';
++
++export const RUTA_POSTULACION = `${RUTA_POSTULACIONES}/:postulacionId`;
++
++const ID_POSTULACION = /^[a-f\d]{24}$/i;
++const ESTADO_ORIGEN = 'aprobada';
++const ESTADO_DESTINO = 'adopcion_concretada';
++
++const CONFLICTOS = {
++  TRANSICION_INVALIDA: `Solo una postulación en estado ${ESTADO_ORIGEN} puede pasar a ${ESTADO_DESTINO}`,
++  ANIMAL_NO_DISPONIBLE: 'El animal ya tiene una adopción concretada',
++};
++
++// PATCH /api/adopciones/postulaciones/{postulacionId}: transición aprobada → adopcion_concretada (RN-08).
++// Orden: validar entrada → leer postulación → validar estado y confirmaciones → notificar a M1 →
++// confirmar en MongoDB. Si M1 falla, no se escribe nada en MongoDB.
++export function concretarAdopcion({ consultarRegistro, tokenRegistro, operaciones, error }) {
++  return async (req, res) => {
++    const { postulacionId } = req.params;
++    const { estado, retiroFisicoConfirmado, actaFirmada } = req.body ?? {};
++
++    if (!ID_POSTULACION.test(postulacionId)) {
++      return error(res, 400, 'ID_INVALIDO', 'El identificador de la postulación no es válido');
++    }
++    if (typeof estado !== 'string' || !estado.trim()) {
++      return error(res, 400, 'DATOS_INVALIDOS', 'Indica el estado destino de la postulación');
++    }
++    if (estado !== ESTADO_DESTINO) {
++      return error(res, 409, 'TRANSICION_INVALIDA', `Esta ruta solo admite la transición a ${ESTADO_DESTINO}`);
++    }
++    if (typeof retiroFisicoConfirmado !== 'boolean' || typeof actaFirmada !== 'boolean') {
++      return error(res, 400, 'DATOS_INVALIDOS', 'Indica retiroFisicoConfirmado y actaFirmada como booleanos');
++    }
++    if (!operaciones) {
++      return error(res, 503, 'SERVICIO_NO_DISPONIBLE', 'El almacenamiento de postulaciones no está disponible');
++    }
++
++    let postulacion;
++    try {
++      postulacion = await operaciones.obtener(postulacionId);
++    } catch {
++      return error(res, 503, 'SERVICIO_NO_DISPONIBLE', 'No pudimos consultar la postulación');
++    }
++    if (!postulacion) {
++      return error(res, 404, 'POSTULACION_NO_ENCONTRADA', 'La postulación no existe');
++    }
++    if (postulacion.estado !== ESTADO_ORIGEN) {
++      return error(res, 409, 'TRANSICION_INVALIDA', CONFLICTOS.TRANSICION_INVALIDA);
++    }
++    if (!retiroFisicoConfirmado || !actaFirmada) {
++      return error(res, 409, 'CONFIRMACION_REQUERIDA',
++        'Debe confirmarse el retiro físico del animal y la firma del acta de compromiso');
++    }
++    try {
++      if (await operaciones.animalAdoptado(postulacion.animalID)) {
++        return error(res, 409, 'ANIMAL_NO_DISPONIBLE', CONFLICTOS.ANIMAL_NO_DISPONIBLE);
++      }
++    } catch {
++      return error(res, 503, 'SERVICIO_NO_DISPONIBLE', 'No pudimos comprobar el estado del animal');
++    }
++
++    // Notificar al módulo 1 ANTES de confirmar en MongoDB.
++    const tutor = await consultarRegistro(`/api/registro/animales/${encodeURIComponent(postulacion.animalID)}/tutor`, {
++      method: 'PATCH',
++      headers: {
++        Authorization: tokenRegistro ? `Bearer ${tokenRegistro}` : req.get('Authorization'),
++        'Content-Type': 'application/json',
++      },
++      body: JSON.stringify({ postulanteRut: postulacion.postulanteRut }),
++    });
++    if (tutor.estado === 404 && tutor.datos?.error?.codigo === 'ANIMAL_NO_ENCONTRADO') {
++      return error(res, 404, 'ANIMAL_NO_ENCONTRADO', 'El animal no existe en el registro');
++    }
++    if (tutor.estado !== 200) {
++      // Bloqueo de la transición: la postulación sigue en "aprobada".
++      return error(res, 503, 'SERVICIO_NO_DISPONIBLE',
++        'No pudimos actualizar el tutor en el registro; la adopción no se concretó');
++    }
++
++    let resultado;
++    try {
++      resultado = await operaciones.concretar(postulacionId, {
++        retiroFisicoConfirmado: true,
++        actaFirmada: true,
++        fechaConcrecion: new Date().toISOString(),
++        concretadaPor: req.usuario.rut,
++      });
++    } catch {
++      return error(res, 503, 'SERVICIO_NO_DISPONIBLE',
++        'El registro fue notificado, pero no pudimos guardar el cambio. Reintenta la operación');
++    }
++    if (resultado.conflicto) {
++      return error(res, 409, resultado.conflicto, CONFLICTOS[resultado.conflicto]);
++    }
++    return res.set('Cache-Control', 'no-store').status(200).json(resultado.documento);
++  };
++}
+diff --git a/src/app.js b/src/app.js
+index d0e9ca3..afe3b78 100644
+--- a/src/app.js
++++ b/src/app.js
+@@ -2,6 +2,7 @@ import express from 'express';
+ import { fileURLToPath } from 'node:url';
+ import { crearClienteNucleo } from './nucleo.js';
+ import { crearPostulacion, RUTA_POSTULACIONES } from './postulaciones.js';
++import { concretarAdopcion, RUTA_POSTULACION } from './adopcion-concretada.js';
+ 
+ const SESIONES = '/api/nucleo/sesiones';
+ 
+@@ -30,7 +31,7 @@ function requierePerfil(...perfiles) {
+   };
+ }
+ 
+-export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUrl, tokenRegistro, guardarPostulacion }) {
++export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUrl, tokenRegistro, guardarPostulacion, operacionesAdopcion }) {
+   const consultarNucleo = crearClienteNucleo(nucleoUrl, timeoutMs);
+   const consultarRegistro = crearClienteNucleo(registroUrl, timeoutMs);
+   const app = express();
+@@ -94,6 +95,9 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
+   app.post(RUTA_POSTULACIONES, autenticar, requierePerfil('vecino'), express.json(), crearPostulacion({
+     consultarNucleo, consultarRegistro, tokenRegistro, guardar: guardarPostulacion, error,
+   }));
++  app.patch(RUTA_POSTULACION, autenticar, requierePerfil('funcionario'), express.json(), concretarAdopcion({
++    consultarRegistro, tokenRegistro, operaciones: operacionesAdopcion, error,
++  }));
+ 
+   app.use((req, res) => error(res, 404, 'RUTA_NO_ENCONTRADA', 'La ruta no existe'));
+ 
+diff --git a/src/repositorio-postulaciones.js b/src/repositorio-postulaciones.js
+index 2514d51..74345e5 100644
+--- a/src/repositorio-postulaciones.js
++++ b/src/repositorio-postulaciones.js
+@@ -40,3 +40,35 @@ export async function crearRepositorioPostulaciones(cliente) {
+     }, { readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' } }));
+   };
+ }
++
++// Operaciones para la transición aprobada → adopcion_concretada (RN-08).
++export async function crearOperacionesAdopcion(cliente) {
++  const postulaciones = cliente.db('tr_adopciones').collection('postulaciones');
++  // Un animal solo puede tener una adopción concretada.
++  await postulaciones.createIndex({ animalID: 1 }, {
++    unique: true,
++    partialFilterExpression: { estado: 'adopcion_concretada' },
++    name: 'animal_adopcion_concretada_unica',
++  });
++
++  return {
++    obtener: id => postulaciones.findOne({ _id: new ObjectId(id) }, { projection: { _id: 0 } }),
++    animalAdoptado: async animalID => Boolean(
++      await postulaciones.findOne({ animalID, estado: 'adopcion_concretada' }, { projection: { _id: 1 } }),
++    ),
++    // Actualización condicional: solo cambia si la postulación sigue en "aprobada".
++    concretar: async (id, cambios) => {
++      try {
++        const documento = await postulaciones.findOneAndUpdate(
++          { _id: new ObjectId(id), estado: 'aprobada' },
++          { $set: { ...cambios, estado: 'adopcion_concretada' } },
++          { returnDocument: 'after', projection: { _id: 0 } },
++        );
++        return documento ? { documento } : { conflicto: 'TRANSICION_INVALIDA' };
++      } catch (fallo) {
++        if (fallo.code === 11000) return { conflicto: 'ANIMAL_NO_DISPONIBLE' };
++        throw fallo;
++      }
++    },
++  };
++}
+diff --git a/src/server.js b/src/server.js
+index f4dc61b..4a3c688 100644
+--- a/src/server.js
++++ b/src/server.js
+@@ -1,6 +1,6 @@
+ import { crearApp } from './app.js';
+ import { MongoClient } from 'mongodb';
+-import { crearRepositorioPostulaciones } from './repositorio-postulaciones.js';
++import { crearOperacionesAdopcion, crearRepositorioPostulaciones } from './repositorio-postulaciones.js';
+ 
+ const puerto = Number(process.env.PORT ?? 3000);
+ const nucleoUrl = process.env.NUCLEO_URL;
+@@ -13,10 +13,12 @@ if (!nucleoUrl) {
+ 
+ const cliente = process.env.MONGODB_URI ? new MongoClient(process.env.MONGODB_URI) : undefined;
+ let guardarPostulacion;
++let operacionesAdopcion;
+ if (cliente) {
+   try {
+     await cliente.connect();
+     guardarPostulacion = await crearRepositorioPostulaciones(cliente);
++    operacionesAdopcion = await crearOperacionesAdopcion(cliente);
+   } catch {
+     await cliente.close();
+     throw new Error('No se pudo inicializar MongoDB para las postulaciones');
+@@ -29,6 +31,7 @@ const app = crearApp({
+   registroUrl: process.env.M1_URL || nucleoUrl,
+   tokenRegistro: process.env.M1_TOKEN,
+   guardarPostulacion,
++  operacionesAdopcion,
+ });
+ const servidor = app.listen(puerto, () => console.log(`Adopciones escucha en el puerto ${puerto}`));
+ if (cliente) {
+diff --git a/test/adopcion-concretada.test.js b/test/adopcion-concretada.test.js
+new file mode 100644
+index 0000000..e3bd31b
+--- /dev/null
++++ b/test/adopcion-concretada.test.js
+@@ -0,0 +1,242 @@
++import assert from 'node:assert/strict';
++import { createServer } from 'node:http';
++import { after, before, beforeEach, test } from 'node:test';
++import { crearApp } from '../src/app.js';
++
++const ID = 'a'.repeat(24);
++const OTRO_ID = 'b'.repeat(24);
++const RUTA = id => `/api/adopciones/postulaciones/${id}`;
++const perfiles = new Map([
++  ['demo.vecino', { rut: '10000000-8', perfil: 'vecino' }],
++  ['demo.funcionario', { rut: '20000000-1', perfil: 'funcionario' }],
++]);
++
++function json(res, estado, datos) {
++  res.writeHead(estado, { 'Content-Type': 'application/json' });
++  res.end(JSON.stringify(datos));
++}
++
++function nucleo(req, res) {
++  const usuario = perfiles.get(req.headers.authorization?.slice(7));
++  return req.url === '/api/nucleo/sesiones/actual' && usuario ? json(res, 200, usuario) : json(res, 401, {});
++}
++
++// M1 simulado: registra cada PATCH de tutor y responde según `modoM1`.
++let modoM1;
++let llamadasM1;
++let eventos;
++async function registro(req, res) {
++  let cuerpo = '';
++  for await (const trozo of req) cuerpo += trozo;
++  const coincide = req.method === 'PATCH' && /^\/api\/registro\/animales\/[^/]+\/tutor$/.test(req.url);
++  if (!coincide) return json(res, 404, {});
++  llamadasM1.push({ url: req.url, authorization: req.headers.authorization, cuerpo: JSON.parse(cuerpo) });
++  eventos.push('m1');
++  if (modoM1 === 'caido') return json(res, 500, {});
++  if (modoM1 === 'html') {
++    res.writeHead(502, { 'Content-Type': 'text/html' });
++    return res.end('<h1>Error</h1>');
++  }
++  if (modoM1 === 'colgado') return; // nunca responde: el cliente agota el tiempo
++  if (modoM1 === 'sin_animal') return json(res, 404, { error: { codigo: 'ANIMAL_NO_ENCONTRADO' } });
++  return json(res, 200, { animalId: 'SIM-000001', tutorRut: JSON.parse(cuerpo).postulanteRut });
++}
++
++// Repositorio en memoria con la misma interfaz que crearOperacionesAdopcion.
++let docs;
++let falloMongo;
++const operaciones = {
++  obtener: async id => docs.get(id) ?? null,
++  animalAdoptado: async animalID => [...docs.values()].some(d => d.animalID === animalID && d.estado === 'adopcion_concretada'),
++  concretar: async (id, cambios) => {
++    eventos.push('mongo');
++    if (falloMongo) throw new Error('mongo caído');
++    const actual = docs.get(id);
++    if (actual?.estado !== 'aprobada') return { conflicto: 'TRANSICION_INVALIDA' };
++    const documento = { ...actual, ...cambios, estado: 'adopcion_concretada' };
++    docs.set(id, documento);
++    return { documento };
++  },
++};
++
++const cuerpoValido = { estado: 'adopcion_concretada', retiroFisicoConfirmado: true, actaFirmada: true };
++let nucleoSrv; let registroSrv; let moduloSrv; let base; let nucleoUrl; let registroUrl;
++const escuchar = s => new Promise(r => s.listen(0, '127.0.0.1', () => r(`http://127.0.0.1:${s.address().port}`)));
++const cerrar = s => new Promise(r => { s.closeAllConnections?.(); s.close(() => r()); });
++
++before(async () => {
++  nucleoSrv = createServer(nucleo);
++  registroSrv = createServer(registro);
++  nucleoUrl = await escuchar(nucleoSrv);
++  registroUrl = await escuchar(registroSrv);
++  moduloSrv = createServer(crearApp({ nucleoUrl, registroUrl, timeoutMs: 300, operacionesAdopcion: operaciones }));
++  base = await escuchar(moduloSrv);
++});
++after(async () => { await Promise.all([cerrar(moduloSrv), cerrar(registroSrv), cerrar(nucleoSrv)]); });
++beforeEach(() => {
++  modoM1 = 'ok'; llamadasM1 = []; eventos = []; falloMongo = false;
++  docs = new Map([
++    [ID, { postulacionID: ID, postulanteRut: '10000000-8', animalID: 'SIM-000001', estado: 'aprobada' }],
++    [OTRO_ID, { postulacionID: OTRO_ID, postulanteRut: '10000000-8', animalID: 'SIM-000002', estado: 'recibida' }],
++  ]);
++});
++
++const patch = (id, cuerpo = cuerpoValido, token = 'demo.funcionario') => fetch(base + RUTA(id), {
++  method: 'PATCH',
++  headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
++  body: JSON.stringify(cuerpo),
++});
++
++test('concreta la adopción: notifica a M1 con postulanteRut y luego guarda en MongoDB', async () => {
++  const res = await patch(ID);
++  assert.equal(res.status, 200);
++  const cuerpo = await res.json();
++  assert.equal(cuerpo.estado, 'adopcion_concretada');
++  assert.equal(cuerpo.retiroFisicoConfirmado, true);
++  assert.equal(cuerpo.actaFirmada, true);
++  assert.equal(cuerpo.concretadaPor, '20000000-1');
++  assert.deepEqual(eventos, ['m1', 'mongo']);
++  assert.equal(llamadasM1.length, 1);
++  assert.equal(llamadasM1[0].url, '/api/registro/animales/SIM-000001/tutor');
++  assert.deepEqual(llamadasM1[0].cuerpo, { postulanteRut: '10000000-8' });
++  assert.equal(docs.get(ID).estado, 'adopcion_concretada');
++});
++
++test('409 TRANSICION_INVALIDA si la postulación no está aprobada, sin llamar a M1', async () => {
++  const res = await patch(OTRO_ID);
++  assert.equal(res.status, 409);
++  assert.equal((await res.json()).error.codigo, 'TRANSICION_INVALIDA');
++  assert.equal(llamadasM1.length, 0);
++  assert.equal(docs.get(OTRO_ID).estado, 'recibida');
++});
++
++test('409 TRANSICION_INVALIDA al repetir la operación sobre una adopción ya concretada', async () => {
++  assert.equal((await patch(ID)).status, 200);
++  const res = await patch(ID);
++  assert.equal(res.status, 409);
++  assert.equal((await res.json()).error.codigo, 'TRANSICION_INVALIDA');
++  assert.equal(llamadasM1.length, 1);
++});
++
++test('409 TRANSICION_INVALIDA para otros estados destino', async () => {
++  const res = await patch(ID, { estado: 'recibida' });
++  assert.equal(res.status, 409);
++  assert.equal((await res.json()).error.codigo, 'TRANSICION_INVALIDA');
++  assert.equal(docs.get(ID).estado, 'aprobada');
++});
++
++test('400 si faltan o no son booleanos retiroFisicoConfirmado y actaFirmada', async () => {
++  for (const cuerpo of [
++    { estado: 'adopcion_concretada' },
++    { estado: 'adopcion_concretada', retiroFisicoConfirmado: true },
++    { estado: 'adopcion_concretada', actaFirmada: true },
++    { estado: 'adopcion_concretada', retiroFisicoConfirmado: 'si', actaFirmada: true },
++    {},
++  ]) {
++    const res = await patch(ID, cuerpo);
++    assert.equal(res.status, 400);
++    assert.equal((await res.json()).error.codigo, 'DATOS_INVALIDOS');
++  }
++  assert.equal(llamadasM1.length, 0);
++  assert.equal(docs.get(ID).estado, 'aprobada');
++});
++
++test('409 CONFIRMACION_REQUERIDA si el retiro o el acta no están confirmados', async () => {
++  for (const cuerpo of [
++    { ...cuerpoValido, retiroFisicoConfirmado: false },
++    { ...cuerpoValido, actaFirmada: false },
++    { ...cuerpoValido, retiroFisicoConfirmado: false, actaFirmada: false },
++  ]) {
++    const res = await patch(ID, cuerpo);
++    assert.equal(res.status, 409);
++    assert.equal((await res.json()).error.codigo, 'CONFIRMACION_REQUERIDA');
++  }
++  assert.equal(llamadasM1.length, 0);
++  assert.equal(docs.get(ID).estado, 'aprobada');
++});
++
++for (const modo of ['caido', 'html', 'colgado']) {
++  test(`503 y sin cambios en MongoDB si M1 no responde (${modo})`, async () => {
++    modoM1 = modo;
++    const res = await patch(ID);
++    assert.equal(res.status, 503);
++    assert.equal((await res.json()).error.codigo, 'SERVICIO_NO_DISPONIBLE');
++    assert.equal(llamadasM1.length, 1);
++    assert.deepEqual(eventos, ['m1']); // nunca se intentó escribir en MongoDB
++    assert.equal(docs.get(ID).estado, 'aprobada');
++    assert.equal(docs.get(ID).actaFirmada, undefined);
++  });
++}
++
++test('404 ANIMAL_NO_ENCONTRADO si M1 no conoce al animal, sin cambios en MongoDB', async () => {
++  modoM1 = 'sin_animal';
++  const res = await patch(ID);
++  assert.equal(res.status, 404);
++  assert.equal((await res.json()).error.codigo, 'ANIMAL_NO_ENCONTRADO');
++  assert.equal(docs.get(ID).estado, 'aprobada');
++});
++
++test('503 si MongoDB falla después de notificar a M1; la postulación sigue aprobada', async () => {
++  falloMongo = true;
++  const res = await patch(ID);
++  assert.equal(res.status, 503);
++  assert.deepEqual(eventos, ['m1', 'mongo']);
++  assert.equal(docs.get(ID).estado, 'aprobada');
++  falloMongo = false;
++  assert.equal((await patch(ID)).status, 200); // el reintento es idempotente
++});
++
++test('409 TRANSICION_INVALIDA si otra solicitud ganó la carrera después de notificar a M1', async () => {
++  const original = operaciones.concretar;
++  operaciones.concretar = async () => ({ conflicto: 'TRANSICION_INVALIDA' });
++  try {
++    const res = await patch(ID);
++    assert.equal(res.status, 409);
++    assert.equal((await res.json()).error.codigo, 'TRANSICION_INVALIDA');
++  } finally {
++    operaciones.concretar = original;
++  }
++});
++
++test('409 ANIMAL_NO_DISPONIBLE si el animal ya tiene otra adopción concretada', async () => {
++  docs.set(OTRO_ID, { ...docs.get(OTRO_ID), animalID: 'SIM-000001', estado: 'adopcion_concretada' });
++  const res = await patch(ID);
++  assert.equal(res.status, 409);
++  assert.equal((await res.json()).error.codigo, 'ANIMAL_NO_DISPONIBLE');
++  assert.equal(llamadasM1.length, 0);
++});
++
++test('404 si la postulación no existe y 400 si el identificador es inválido', async () => {
++  const noExiste = await patch('c'.repeat(24));
++  assert.equal(noExiste.status, 404);
++  assert.equal((await noExiste.json()).error.codigo, 'POSTULACION_NO_ENCONTRADA');
++  const invalido = await patch('no-es-un-id');
++  assert.equal(invalido.status, 400);
++  assert.equal((await invalido.json()).error.codigo, 'ID_INVALIDO');
++});
++
++test('401 sin token y 403 con perfil vecino', async () => {
++  assert.equal((await patch(ID, cuerpoValido, null)).status, 401);
++  const vecino = await patch(ID, cuerpoValido, 'demo.vecino');
++  assert.equal(vecino.status, 403);
++  assert.equal((await vecino.json()).error.codigo, 'PERFIL_NO_AUTORIZADO');
++  assert.equal(llamadasM1.length, 0);
++});
++
++test('envía M1_TOKEN a M1 cuando está configurado', async () => {
++  const servidor = createServer(crearApp({
++    nucleoUrl, registroUrl, timeoutMs: 300, tokenRegistro: 'servicio.m1', operacionesAdopcion: operaciones,
++  }));
++  const origen = await escuchar(servidor);
++  try {
++    const res = await fetch(origen + RUTA(ID), {
++      method: 'PATCH',
++      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer demo.funcionario' },
++      body: JSON.stringify(cuerpoValido),
++    });
++    assert.equal(res.status, 200);
++    assert.equal(llamadasM1[0].authorization, 'Bearer servicio.m1');
++  } finally {
++    await cerrar(servidor);
++  }
++});
+-- 
+2.43.0
+
