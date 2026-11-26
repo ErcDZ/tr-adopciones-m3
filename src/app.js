@@ -4,6 +4,7 @@ import { crearClienteNucleo } from './nucleo.js';
 import { crearPostulacion, RUTA_POSTULACIONES } from './postulaciones.js';
 import { listarAnimalesDisponibles, RUTA_ANIMALES_DISPONIBLES } from './animales.js';
 import { aprobarYCancelarParalelas, RUTA_POSTULACION_DETALLE } from './cancelacion-paralelas.js';
+import { concretarAdopcion } from './adopcion-concretada.js';
 
 const SESIONES = '/api/nucleo/sesiones';
 
@@ -38,6 +39,7 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
   const app = express();
   app.disable('x-powered-by');
   app.use(express.static(fileURLToPath(new URL('../public/', import.meta.url))));
+  app.get('/salud', (_req, res) => res.json({ estado: 'activo' }));
 
   app.post(SESIONES, express.json(), async (req, res) => {
     const { rut, clave } = req.body ?? {};
@@ -103,23 +105,20 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
     requierePerfil('vecino', 'funcionario'),
     listarAnimalesDisponibles({ consultarRegistro, tokenRegistro, error })
   );
-
-
-
-
-
-  app.patch(             // Linea 111
-  RUTA_POSTULACION_DETALLE,
-  autenticar,
-  (req, res, next) => { // Validacion del rol comienza aqui (Linea 114)
+  function requiereFuncionario(req, res, next) {
     if (req.usuario.perfil !== 'funcionario') {
-      return error(res, 403, 'ACCESO_DENEGADO', 'Solo un funcionario puede aprobar postulaciones');
+      return error(res, 403, 'ACCESO_DENEGADO', 'Solo un funcionario puede cambiar el estado de postulaciones');
     }
     next();
-  },
-  express.json(),
-  aprobarYCancelarParalelas({ operaciones: operacionesAdopcion, error })
-);
+  }
+
+  const evaluar = aprobarYCancelarParalelas({ operaciones: operacionesAdopcion, error });
+  const concretar = concretarAdopcion({ consultarRegistro, tokenRegistro, operaciones: operacionesAdopcion, error });
+  app.patch(RUTA_POSTULACION_DETALLE, autenticar, requiereFuncionario, express.json(), (req, res) => {
+    if (req.body?.estado === 'adopcion_concretada') return concretar(req, res);
+    return evaluar(req, res);
+  });
+  app.patch(`${RUTA_POSTULACION_DETALLE}/concretar`, autenticar, requiereFuncionario, express.json(), concretar);
 
   app.use((req, res) => error(res, 404, 'RUTA_NO_ENCONTRADA', 'La ruta no existe'));
 

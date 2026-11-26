@@ -30,7 +30,7 @@ function crearNucleoFalso() {
 
 function crearMemoria() {
   const docs = new Map([
-    ['aaaaaaaaaaaaaaaaaaaaaaaa', { postulacionID: 'aaaaaaaaaaaaaaaaaaaaaaaa', animalID: 'ANIMAL-1', postulanteRut: '11111111-1', estado: 'recibida' }],
+    ['aaaaaaaaaaaaaaaaaaaaaaaa', { postulacionID: 'aaaaaaaaaaaaaaaaaaaaaaaa', animalID: 'ANIMAL-1', postulanteRut: '11111111-1', estado: 'en_evaluación' }],
     ['bbbbbbbbbbbbbbbbbbbbbbbb', { postulacionID: 'bbbbbbbbbbbbbbbbbbbbbbbb', animalID: 'ANIMAL-1', postulanteRut: '12222222-2', estado: 'en_evaluación' }],
     ['cccccccccccccccccccccccc', { postulacionID: 'cccccccccccccccccccccccc', animalID: 'ANIMAL-1', postulanteRut: '13333333-3', estado: 'recibida' }],
     ['dddddddddddddddddddddddd', { postulacionID: 'dddddddddddddddddddddddd', animalID: 'ANIMAL-2', postulanteRut: '14444444-4', estado: 'recibida' }],

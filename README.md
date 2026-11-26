@@ -314,6 +314,18 @@ MongoDB utiliza un índice único de RUT y animal para impedir duplicados en cua
 
 | `404` | `POSTULACION_NO_ENCONTRADA` si el identificador no existe. |
 
+### Evaluación y concreción
+
+El funcionario inicia la evaluación enviando `{"estado":"en_evaluacion"}` al PATCH de la postulación. Se conserva `en_evaluación` como valor almacenado. Después envía `{"estado":"aprobada"}`, lo que también cancela las postulaciones paralelas activas. Ambos pasos requieren el estado anterior correspondiente.
+
+Para concretar, el funcionario envía `{"estado":"adopcion_concretada","retiroFisicoConfirmado":true,"actaFirmada":true}` a `PATCH /api/adopciones/postulaciones/:postulacionId/concretar` o al PATCH de detalle. La API exige `aprobada` y confirma el estado con una escritura condicional. Antes de guardar, solicita el cambio de tutor a M1 con `PATCH /api/registro/animales/:animalId/tutor`. Si M1 falla, se responde 503 con un mensaje controlado.
+
+El índice de exclusividad de adopción usa un filtro parcial con `$in`. Usar MongoDB 6.0 o posterior con replica set o Atlas. Si el índice rechaza datos existentes, el equipo debe revisar las postulaciones aprobadas o concretadas duplicadas antes de desplegar.
+
+`GET /salud` informa disponibilidad HTTP del proceso. La verificación de Núcleo, Registro y almacenamiento se realiza mediante pruebas de sus rutas.
+
+[Pruebas y evidencias de verificación](docs/verificacion-adopciones.md)
+
 
 
 ## Controles de seguridad (OWASP)
@@ -324,7 +336,7 @@ MongoDB utiliza un índice único de RUT y animal para impedir duplicados en cua
 
 | --- | --- | --- | --- |
 
-| Broken Access Control | Verificación de sesión y rol `funcionario` antes de ejecutar la aprobación (`403 ACCESO_DENEGADO` para `vecino`). | `src/app.js` (líneas 111–119) y `requierePerfil` | `npm test` |
+| Broken Access Control | Verificación de sesión y rol `funcionario` antes de aprobar o concretar (`403 ACCESO_DENEGADO` para `vecino`). | `src/app.js`, `requiereFuncionario` y registro de PATCH | `npm test` |
 
 | Broken Authentication | Validación de encabezado `Bearer` y consulta de sesión activa en el núcleo (`401 TOKEN_REQUERIDO` / `TOKEN_INVALIDO`). | `src/app.js` y `src/nucleo.js` | `npm test` |
 
