@@ -9,6 +9,12 @@ const administracion = document.getElementById('administracion');
 const evaluacion = document.getElementById('evaluacion');
 const aviso = document.getElementById('aviso');
 const salir = document.getElementById('salir');
+const confirmacion = document.getElementById('confirmacionAdopcion');
+const formConcrecion = document.getElementById('formConcrecion');
+const avisoConcrecion = document.getElementById('avisoConcrecion');
+const enviarConcrecion = document.getElementById('enviarConcrecion');
+const cancelarConcrecion = document.getElementById('cancelarConcrecion');
+let postulacionPorConcretar = null;
 
 function mensaje(texto) {
   aviso.textContent = texto;
@@ -114,6 +120,20 @@ async function cargarPostulaciones() {
       });
 
       celdaAccion.appendChild(boton);
+      if (postulacion.estado === 'aprobada') {
+        const confirmar = document.createElement('button');
+        confirmar.type = 'button';
+        confirmar.textContent = 'Confirmar adopción';
+        confirmar.addEventListener('click', () => {
+          postulacionPorConcretar = postulacion.postulacionID;
+          formConcrecion.reset();
+          avisoConcrecion.textContent = '';
+          document.getElementById('detalleConcrecion').textContent =
+            `Animal: ${postulacion.animalID}`;
+          confirmacion.showModal();
+        });
+        celdaAccion.appendChild(confirmar);
+      }
       fila.appendChild(celdaAccion);
       lista.appendChild(fila);
     }
@@ -221,6 +241,38 @@ document.getElementById('formEvaluacion').addEventListener('submit', async event
 
   } catch (error) {
     mensaje(error.message);
+  }
+});
+
+cancelarConcrecion.addEventListener('click', () => confirmacion.close());
+confirmacion.addEventListener('cancel', evento => {
+  if (enviarConcrecion.disabled) evento.preventDefault();
+});
+
+formConcrecion.addEventListener('submit', async evento => {
+  evento.preventDefault();
+  if (enviarConcrecion.disabled || !formConcrecion.reportValidity()) return;
+
+  const datos = new FormData(formConcrecion);
+  const id = postulacionPorConcretar;
+  avisoConcrecion.textContent = '';
+  enviarConcrecion.disabled = cancelarConcrecion.disabled = true;
+  try {
+    const resultado = await peticion(`/api/adopciones/postulaciones/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        estado: 'adopcion_concretada',
+        retiroFisicoConfirmado: datos.has('retiro'),
+        actaFirmada: datos.has('acta')
+      }),
+    });
+    confirmacion.close();
+    await cargarPostulaciones();
+    mensaje(`Adopción confirmada. Estado: ${resultado.datos.estado}.`);
+  } catch (error) {
+    avisoConcrecion.textContent = error.message;
+  } finally {
+    enviarConcrecion.disabled = cancelarConcrecion.disabled = false;
   }
 });
 

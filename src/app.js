@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { crearClienteNucleo } from './nucleo.js';
 import { crearPostulacion, RUTA_POSTULACIONES } from './postulaciones.js';
 import { listarAnimalesDisponibles, RUTA_ANIMALES_DISPONIBLES } from './animales.js';
+import { concretarAdopcion } from './adopcion-concretada.js';
 
 const SESIONES = '/api/nucleo/sesiones';
 
@@ -334,12 +335,17 @@ export function crearApp({
     }
   );
 
+  const concretar = concretarAdopcion({
+    consultarRegistro, operaciones: guardarPostulacion?.operacionesConcrecion, error,
+  });
+
   // TAREA 59: FUNCIONARIO CAMBIA ESTADO
   app.patch(`${RUTA_POSTULACIONES}/:postulacionId`,
     autenticar,
     requierePerfil('funcionario'),
     express.json(),
     async (req, res) => {
+      if (req.body?.estado === 'adopcion_concretada') return concretar(req, res);
       const id = req.params.postulacionId;
       const { estado, observaciones } = req.body ?? {};
 
