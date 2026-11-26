@@ -1,0 +1,110 @@
+
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panel de funcionario - Adopciones</title>
+  <link rel="stylesheet" href="/estilos.css">
+  <script type="module" src="/funcionario.js"></script>
+</head>
+
+<body>
+  <header>
+    <div class="marco">
+      <h1>Panel de funcionario</h1>
+      <button id="salir" type="button" hidden>Cerrar sesión</button>
+    </div>
+  </header>
+
+  <main class="marco">
+
+    <!-- INICIO DE SESION -->
+    <section id="inicio">
+      <h2>Iniciar sesión</h2>
+      <p>Acceso exclusivo para funcionarios municipales.</p>
+
+      <form id="sesion">
+        <label>
+          RUT
+          <input name="rut" required placeholder="Sin puntos y con guión">
+        </label>
+
+        <label>
+          Contraseña
+          <input name="clave" type="password" required>
+        </label>
+
+        <button type="submit">Ingresar</button>
+      </form>
+    </section>
+
+    <p id="aviso" role="alert" hidden></p>
+
+    <!-- LISTADO DE POSTULACIONES -->
+    <section id="administracion" hidden>
+      <h2>Administración de postulaciones</h2>
+
+      <button id="actualizar" type="button">
+        Actualizar listado
+      </button>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Postulación</th>
+            <th>RUT</th>
+            <th>Animal</th>
+            <th>Estado</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+
+        <tbody id="lista">
+        </tbody>
+      </table>
+
+      <button id="anterior" type="button">Anterior</button>
+      <span id="pagina">Página 1</span>
+      <button id="siguiente" type="button">Siguiente</button>
+    </section>
+
+    <!-- EVALUAR UNA POSTULACION -->
+    <section id="evaluacion" hidden>
+      <h2>Evaluar postulación</h2>
+
+      <h3>Antecedentes del postulante</h3>
+      <div id="detalle"></div>
+
+      <h3>Habilitación para adoptar</h3>
+      <div id="habilitacion"></div>
+
+      <form id="formEvaluacion">
+        <label>
+          Nuevo estado
+          <select name="estado" required>
+            <option value="">Seleccionar</option>
+            <option value="en_evaluación">En evaluación</option>
+            <option value="aprobada">Aprobada</option>
+            <option value="rechazada">Rechazada</option>
+          </select>
+        </label>
+
+        <label>
+          Observaciones técnicas
+          <textarea
+            name="observaciones"
+            rows="4"
+            maxlength="1000"
+            required
+          ></textarea>
+        </label>
+
+        <button type="submit">Guardar evaluación</button>
+        <button id="volver" type="button">Volver al listado</button>
+      </form>
+    </section>
+
+  </main>
+</body>
+</html>

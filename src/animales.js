@@ -1,4 +1,3 @@
-const ESTADOS_ANIMAL = ['registrado', 'con_microchip', 'inscrito', 'fallecido', 'adoptado'];
 const APTOS = ['con_microchip', 'inscrito'];
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 10;
@@ -36,18 +35,22 @@ function esAnimalDisponible(item) {
     ['adoptado', 'no_disponible', 'registrado'].includes(estado);
 
   if (!id || estaFallecido || noDisponible) return false;
-  if (estado && ESTADOS_ANIMAL.includes(estado) && !APTOS.includes(estado)) return false;
+  if (!APTOS.includes(estado)) return false;
+
+  const codigoMicroship = item.microship ?? item.microchip;
+  if (typeof codigoMicroship !== 'string' ? !codigoMicroship : !codigoMicroship.trim()) {
+    return false;
+  }
 
   return true;
 }
 
 function normalizarAnimal(item) {
-  const microchip = String(item.microchip ?? item.microship ?? '').trim();
   return {
     animalID: String(item.animalID ?? item.animalId).trim(),
     especie: typeof item.especie === 'string' ? item.especie.trim() : '',
     nombre: typeof item.nombre === 'string' ? item.nombre.trim() : '',
-    microchip,
+    microship: String(item.microship ?? item.microchip ?? '').trim(),
   };
 }
 
@@ -75,8 +78,11 @@ export function listarAnimalesDisponibles({ consultarRegistro, tokenRegistro, er
       headers: { Authorization: tokenRegistro ? `Bearer ${tokenRegistro}` : usuarioAuth },
     });
 
-    if (respuesta.estado === 401) {
+    if (respuesta.estado === 401 && !tokenRegistro) {
       return error(res, 401, 'TOKEN_INVALIDO', 'El token no es válido o expiró');
+    }
+    if (respuesta.estado === 403 && !tokenRegistro) {
+      return error(res, 403, 'PERFIL_NO_AUTORIZADO', 'El registro no permite consultar los animales');
     }
 
     const listaBruta = extraerListaAnimales(respuesta.datos);
