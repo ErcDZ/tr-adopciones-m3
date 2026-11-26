@@ -185,7 +185,7 @@ export async function crearRepositorioPostulaciones(cliente) {
           const aprobada = await postulaciones.findOne(
             {
               animalID,
-              estado: 'aprobada',
+              estado: { $in: ['aprobada', 'adopcion_concretada'] },
               _id: { $ne: objetoId }
             },
             { session: sesion }
@@ -248,6 +248,37 @@ export async function crearRepositorioPostulaciones(cliente) {
         writeConcern: { w: 'majority' }
       })
     );
+  };
+
+  guardar.operacionesConcrecion = {
+    obtener: guardar.buscarPorId,
+    concretar(id, animalID, cambios, notificar) {
+      return cliente.withSession(sesion => sesion.withTransaction(async () => {
+        await controlesAnimales.updateOne(
+          { _id: animalID }, { $inc: { revision: 1 } }, { upsert: true, session: sesion }
+        );
+        const objetoId = new ObjectId(id);
+        const duplicada = await postulaciones.findOne(
+          { animalID, estado: 'adopcion_concretada', _id: { $ne: objetoId } },
+          { projection: { _id: 1 }, session: sesion }
+        );
+        if (duplicada) return { conflicto: 'ANIMAL_NO_DISPONIBLE' };
+
+        const documento = await postulaciones.findOneAndUpdate(
+          { _id: objetoId, animalID, estado: 'aprobada' },
+          { $set: {
+            ...cambios,
+            estado: 'adopcion_concretada',
+            fechaActualizacion: cambios.fechaConcrecion,
+          } },
+          { returnDocument: 'after', projection: { _id: 0 }, session: sesion }
+        );
+        if (!documento) return { conflicto: 'TRANSICION_INVALIDA' };
+        // Un rechazo de M1 aborta la transacción, incluido el cambio de estado.
+        await notificar(documento);
+        return { documento };
+      }, { readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' } }));
+    },
   };
 
   return guardar;

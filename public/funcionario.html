@@ -105,6 +105,17 @@
       </form>
     </section>
 
+    <dialog id="confirmacionAdopcion" aria-labelledby="tituloConfirmacion">
+      <form id="formConcrecion">
+        <h2 id="tituloConfirmacion">Confirmar adopción</h2>
+        <p id="detalleConcrecion"></p>
+        <label><input type="checkbox" name="retiro" required> Confirmo el retiro físico del animal</label>
+        <label><input type="checkbox" name="acta" required> Confirmo que el acta de compromiso está firmada</label>
+        <p id="avisoConcrecion" role="alert"></p>
+        <button id="enviarConcrecion" type="submit">Confirmar adopción</button>
+        <button id="cancelarConcrecion" type="button">Cancelar</button>
+      </form>
+    </dialog>
   </main>
 </body>
 </html>
