@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: tr-adopciones-m3
+    runtime: node
+    plan: free
+    branch: deploy/render-adopciones
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /salud
+    envVars:
+      - key: NUCLEO_URL
+        value: https://nucleo-tr.onrender.com
+      - key: M1_URL
+        value: https://nucleo-tr.onrender.com
+      - key: MONGODB_URI
+        sync: false
+      - key: M1_TOKEN
+        sync: false
