@@ -38,20 +38,16 @@ function esAnimalDisponible(item) {
   if (!id || estaFallecido || noDisponible) return false;
   if (estado && ESTADOS_ANIMAL.includes(estado) && !APTOS.includes(estado)) return false;
 
-  const codigoMicroship = item.microship ?? item.microchip;
-  if (typeof codigoMicroship !== 'string' ? !codigoMicroship : !codigoMicroship.trim()) {
-    return false;
-  }
-
   return true;
 }
 
 function normalizarAnimal(item) {
+  const microchip = String(item.microchip ?? item.microship ?? '').trim();
   return {
     animalID: String(item.animalID ?? item.animalId).trim(),
     especie: typeof item.especie === 'string' ? item.especie.trim() : '',
     nombre: typeof item.nombre === 'string' ? item.nombre.trim() : '',
-    microship: String(item.microship ?? item.microchip ?? '').trim(),
+    microchip,
   };
 }
 

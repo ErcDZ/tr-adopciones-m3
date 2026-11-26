@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { crearClienteNucleo } from './nucleo.js';
 import { crearPostulacion, RUTA_POSTULACIONES } from './postulaciones.js';
 import { listarAnimalesDisponibles, RUTA_ANIMALES_DISPONIBLES } from './animales.js';
-import { aprobarYCancelarParalelas, RUTA_POSTULACION_DETALLE } from './cancelacion-paralelas.js';
+import { aprobarPostulacion } from './aprobaciones.js';
 
 const SESIONES = '/api/nucleo/sesiones';
 
@@ -23,18 +23,26 @@ function tieneIdentidad(datos) {
   return textoValido(datos?.rut) && textoValido(datos?.perfil);
 }
 
-function requierePerfil(...perfiles) {
+function requierePerfil(perfiles, codigoError = 'PERFIL_NO_AUTORIZADO') {
+  const permitidos = Array.isArray(perfiles) ? perfiles : [perfiles];
   return (req, res, next) => {
-    if (!perfiles.includes(req.usuario.perfil)) {
-      return error(res, 403, 'PERFIL_NO_AUTORIZADO', 'Tu perfil no tiene permiso para esta ruta');
+    if (!permitidos.includes(req.usuario.perfil)) {
+      return error(res, 403, codigoError, 'Tu perfil no tiene permiso para esta ruta');
     }
     next();
   };
 }
 
-export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUrl, tokenRegistro, guardarPostulacion, operacionesAdopcion }) {
+export function crearApp({
+  nucleoUrl,
+  timeoutMs = 35_000,
+  registroUrl = nucleoUrl,
+  tokenRegistro,
+  guardarPostulacion,
+  operacionesAdopcion,
+}) {
   const consultarNucleo = crearClienteNucleo(nucleoUrl, timeoutMs);
-  const consultarRegistro = crearClienteNucleo(registroUrl, timeoutMs);
+  const consultarRegistro = crearClienteNucleo(registroUrl || nucleoUrl, timeoutMs);
   const app = express();
   app.disable('x-powered-by');
   app.use(express.static(fileURLToPath(new URL('../public/', import.meta.url))));
@@ -91,34 +99,25 @@ export function crearApp({ nucleoUrl, timeoutMs = 35_000, registroUrl = nucleoUr
     res.set('Cache-Control', 'no-store').json(req.usuario);
   }
 
-  app.get('/api/adopciones/acceso/vecino', autenticar, requierePerfil('vecino'), responderUsuario);
-  app.get('/api/adopciones/acceso/funcionario', autenticar, requierePerfil('funcionario'), responderUsuario);
-  app.post(RUTA_POSTULACIONES, autenticar, requierePerfil('vecino'), express.json(), crearPostulacion({
-    consultarNucleo, consultarRegistro, tokenRegistro, guardar: guardarPostulacion, error,
-  }));
+app.get('/api/adopciones/acceso/vecino', autenticar, requierePerfil('vecino'), responderUsuario);
+app.get('/api/adopciones/acceso/funcionario', autenticar, requierePerfil('funcionario'), responderUsuario);
+app.post(RUTA_POSTULACIONES, autenticar, requierePerfil('vecino'), express.json(), crearPostulacion({
+  consultarNucleo, consultarRegistro, tokenRegistro, guardar: guardarPostulacion, error,
+}));
 
-  app.get(
-    RUTA_ANIMALES_DISPONIBLES,
-    autenticar,
-    requierePerfil('vecino', 'funcionario'),
-    listarAnimalesDisponibles({ consultarRegistro, tokenRegistro, error })
-  );
-
-
-
-
-
-  app.patch(             // Linea 111
-  RUTA_POSTULACION_DETALLE,
+app.patch(
+  `${RUTA_POSTULACIONES}/:id`,
   autenticar,
-  (req, res, next) => { // Validacion del rol comienza aqui (Linea 114)
-    if (req.usuario.perfil !== 'funcionario') {
-      return error(res, 403, 'ACCESO_DENEGADO', 'Solo un funcionario puede aprobar postulaciones');
-    }
-    next();
-  },
+  requierePerfil('funcionario', 'ACCESO_DENEGADO'),
   express.json(),
-  aprobarYCancelarParalelas({ operaciones: operacionesAdopcion, error })
+  (req, res) => aprobarPostulacion({ req, res, operacionesAdopcion, error })
+);
+
+app.get(
+  RUTA_ANIMALES_DISPONIBLES,
+  autenticar,
+  requierePerfil('vecino'),
+  listarAnimalesDisponibles({ consultarRegistro, tokenRegistro, error })
 );
 
   app.use((req, res) => error(res, 404, 'RUTA_NO_ENCONTRADA', 'La ruta no existe'));

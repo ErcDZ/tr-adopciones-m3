@@ -137,7 +137,7 @@ async function cargarCatalogo() {
       const id = animal.animalID.trim();
       const nombreTexto = animal.nombre || id;
       const especieTexto = animal.especie || 'No especificada';
-      const microshipTexto = animal.microship || animal.microchip || 'Sin microship';
+      const microchipTexto = animal.microchip || animal.microship || 'Sin microchip';
 
       const fila = document.createElement('article');
 
@@ -145,7 +145,7 @@ async function cargarCatalogo() {
       tituloAnimal.textContent = `${nombreTexto} (${id})`;
 
       const detalle = document.createElement('p');
-      detalle.textContent = `Especie: ${especieTexto} · Microship: ${microshipTexto}`;
+      detalle.textContent = `Especie: ${especieTexto} · Microchip: ${microchipTexto}`;
 
       const boton = document.createElement('button');
       boton.type = 'button';
