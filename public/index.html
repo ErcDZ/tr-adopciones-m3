@@ -25,7 +25,33 @@
 
     <section id="catalogo" hidden>
       <h1>Animales en adopción</h1>
+
+      <form id="filtros-catalogo" class="campos">
+        <label>Especie
+          <input id="filtro-especie" name="especie" type="search" placeholder="Ej. perro, gato (vacío = todas)">
+        </label>
+        <label>Por página (limit)
+          <select id="filtro-limit" name="limit">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+          </select>
+        </label>
+        <div>
+          <button type="submit">Filtrar</button>
+          <button id="limpiar-filtros" class="secundario" type="button">Limpiar</button>
+        </div>
+      </form>
+
+      <p id="estado-catalogo" role="status" hidden></p>
       <div id="animales"></div>
+
+      <nav id="paginacion-catalogo" aria-label="Paginación del catálogo" hidden>
+        <button id="pagina-anterior" class="secundario" type="button">Anterior</button>
+        <span id="info-pagina"></span>
+        <button id="pagina-siguiente" class="secundario" type="button">Siguiente</button>
+      </nav>
+
       <button id="recargar" type="button" hidden>Reintentar carga</button>
     </section>
 

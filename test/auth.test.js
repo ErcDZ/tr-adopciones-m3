@@ -6,6 +6,7 @@ import { crearApp } from '../src/app.js';
 const sesiones = '/api/nucleo/sesiones';
 const vecino = '/api/adopciones/acceso/vecino';
 const funcionario = '/api/adopciones/acceso/funcionario';
+const catalogo = '/api/adopciones/animales-disponibles';
 const perfiles = new Map([
   ['demo.vecino', { rut: '10000000-8', perfil: 'vecino' }],
   ['demo.funcionario', { rut: '20000000-1', perfil: 'funcionario' }],
@@ -23,6 +24,16 @@ function json(res, estado, datos) {
 }
 
 async function nucleo(req, res) {
+  if (req.method === 'GET' && req.url === '/api/registro/animales') {
+    if (req.headers.authorization === 'Bearer demo.vecino') {
+      return json(res, 200, { datos: [
+        { animalId: 'A-001', nombre: 'Animal ficticio', especie: 'perro', estado: 'inscrito', microchip: '123' },
+        { animalId: 'A-002', especie: 'perro', estado: 'fallecido', microchip: '456' },
+        { animalId: 'A-003', especie: 'perro', estado: 'desconocido', microchip: '789' },
+      ] });
+    }
+    return json(res, req.headers.authorization === 'Bearer demo.funcionario' ? 403 : 401, {});
+  }
   if (req.method === 'POST' && req.url === sesiones) {
     let cuerpo = '';
     for await (const trozo of req) cuerpo += trozo;
@@ -84,6 +95,32 @@ async function comprobarError(res, estado, codigo) {
   assert.match(cuerpo.error.mensaje, /\S/);
   assert.deepEqual(cuerpo, { error: { codigo, mensaje: cuerpo.error.mensaje } });
 }
+
+test('el catálogo protege el acceso y conserva el identificador devuelto por M1', async () => {
+  await comprobarError(await acceder(catalogo), 401, 'TOKEN_REQUERIDO');
+  await comprobarError(await acceder(catalogo, cabecera('demo.admin')), 403, 'PERFIL_NO_AUTORIZADO');
+  const res = await acceder(catalogo + '?especie=perro', cabecera('demo.vecino'));
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), {
+    page: 1, limit: 10, total: 1,
+    datos: [{ animalID: 'A-001', nombre: 'Animal ficticio', especie: 'perro', microship: '123' }],
+  });
+});
+
+test('el rechazo de M1 no se confunde con un permiso local ni invalida la sesión por un token de servicio', async () => {
+  await comprobarError(await acceder(catalogo, cabecera('demo.funcionario')), 503, 'SERVICIO_NO_DISPONIBLE');
+  const servicio = createServer(crearApp({
+    nucleoUrl: `http://127.0.0.1:${core.address().port}`,
+    tokenRegistro: 'demo.servicio-vencido',
+  }));
+  const origen = await escuchar(servicio);
+  try {
+    const res = await fetch(origen + catalogo, { headers: cabecera('demo.vecino') });
+    await comprobarError(res, 503, 'SERVICIO_NO_DISPONIBLE');
+  } finally {
+    await cerrar(servicio);
+  }
+});
 
 test('reenvía rut y clave y devuelve la sesión del núcleo', async () => {
   const res = await login('clave-ficticia');
