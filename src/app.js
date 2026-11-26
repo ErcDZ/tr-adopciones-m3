@@ -141,7 +141,7 @@ export function crearApp({
   app.get('/api/adopciones/acceso/funcionario',
     autenticar, requierePerfil('funcionario'), responderUsuario);
 
-  app.get(RUTA_ANIMALES_DISPONIBLES,
+  app.get([RUTA_ANIMALES_DISPONIBLES, '/api/adopciones/catalogo'],
     autenticar,
     requierePerfil('vecino', 'funcionario'),
     listarAnimalesDisponibles({ consultarRegistro, tokenRegistro, error })

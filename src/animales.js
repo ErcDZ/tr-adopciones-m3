@@ -81,6 +81,9 @@ export function listarAnimalesDisponibles({ consultarRegistro, tokenRegistro, er
     if (respuesta.estado === 401 && !tokenRegistro) {
       return error(res, 401, 'TOKEN_INVALIDO', 'El token no es válido o expiró');
     }
+    if (respuesta.estado === 403 && !tokenRegistro) {
+      return error(res, 403, 'PERFIL_NO_AUTORIZADO', 'El registro no permite consultar los animales');
+    }
 
     const listaBruta = extraerListaAnimales(respuesta.datos);
     if (respuesta.estado !== 200 || !listaBruta) {

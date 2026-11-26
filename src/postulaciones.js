@@ -40,6 +40,12 @@ export function crearPostulacion({ consultarNucleo, consultarRegistro, tokenRegi
     const animal = await consultarRegistro(`/api/registro/animales/${encodeURIComponent(animalID)}`, {
       headers: { Authorization: tokenRegistro ? `Bearer ${tokenRegistro}` : autorizacion },
     });
+    if (animal.estado === 401 && !tokenRegistro) {
+      return error(res, 401, 'TOKEN_INVALIDO', 'El token no es válido o expiró');
+    }
+    if (animal.estado === 403 && !tokenRegistro) {
+      return error(res, 403, 'PERFIL_NO_AUTORIZADO', 'El registro no permite consultar este animal');
+    }
     if (animal.estado === 404 && animal.datos?.error?.codigo === 'ANIMAL_NO_ENCONTRADO') {
       return error(res, 404, 'ANIMAL_NO_ENCONTRADO', 'El animal no existe en el registro');
     }

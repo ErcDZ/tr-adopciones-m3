@@ -15,7 +15,10 @@ const datosValidos = {
 };
 
 // Ejecutamos una postulación con servicios simulados, sin usar Internet ni MongoDB.
-async function probar({ cambios = {}, estadoAnimal = 'inscrito', prohibicion = false, conflicto = null } = {}) {
+async function probar({
+  cambios = {}, estadoAnimal = 'inscrito', prohibicion = false, conflicto = null,
+  estadoRegistro = 200, tokenRegistro,
+} = {}) {
   let guardados = 0;
   let consultas = 0;
 
@@ -35,9 +38,10 @@ async function probar({ cambios = {}, estadoAnimal = 'inscrito', prohibicion = f
   };
 
   const ruta = crearPostulacion({
+    tokenRegistro,
     consultarRegistro: async () => {
       consultas++;
-      return { estado: 200, datos: {
+      return { estado: estadoRegistro, datos: {
         animalId: 'SIM-000001', estado: estadoAnimal, microchip: '123456789012345',
       }};
     },
@@ -57,6 +61,21 @@ async function probar({ cambios = {}, estadoAnimal = 'inscrito', prohibicion = f
   await ruta(req, res);
   return { res, consultas, guardados };
 }
+
+test('la postulación conserva 401 y 403 del usuario y devuelve 503 ante un fallo de servicio', async () => {
+  for (const [estadoRegistro, tokenRegistro, estadoEsperado, codigo] of [
+    [401, undefined, 401, 'TOKEN_INVALIDO'],
+    [403, undefined, 403, 'PERFIL_NO_AUTORIZADO'],
+    [403, 'token-ficticio-de-servicio', 503, 'SERVICIO_NO_DISPONIBLE'],
+    [503, undefined, 503, 'SERVICIO_NO_DISPONIBLE'],
+  ]) {
+    const { res, consultas, guardados } = await probar({ estadoRegistro, tokenRegistro });
+    assert.equal(res.codigo, estadoEsperado);
+    assert.equal(res.cuerpo.error.codigo, codigo);
+    assert.equal(consultas, 1);
+    assert.equal(guardados, 0);
+  }
+});
 
 test('400: rechaza RUT con formato incorrecto', async () => {
   const { res, consultas } = await probar({ cambios: { postulanteRut: 'rut-malo' } });

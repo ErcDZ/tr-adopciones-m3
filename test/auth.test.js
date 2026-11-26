@@ -97,18 +97,20 @@ async function comprobarError(res, estado, codigo) {
 }
 
 test('el catálogo protege el acceso y conserva el identificador devuelto por M1', async () => {
-  await comprobarError(await acceder(catalogo), 401, 'TOKEN_REQUERIDO');
-  await comprobarError(await acceder(catalogo, cabecera('demo.admin')), 403, 'PERFIL_NO_AUTORIZADO');
-  const res = await acceder(catalogo + '?especie=perro', cabecera('demo.vecino'));
-  assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), {
-    page: 1, limit: 10, total: 1,
-    datos: [{ animalID: 'A-001', nombre: 'Animal ficticio', especie: 'perro', microship: '123' }],
-  });
+  for (const ruta of [catalogo, '/api/adopciones/catalogo']) {
+    await comprobarError(await acceder(ruta), 401, 'TOKEN_REQUERIDO');
+    await comprobarError(await acceder(ruta, cabecera('demo.admin')), 403, 'PERFIL_NO_AUTORIZADO');
+    const res = await acceder(ruta + '?especie=perro', cabecera('demo.vecino'));
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), {
+      page: 1, limit: 10, total: 1,
+      datos: [{ animalID: 'A-001', nombre: 'Animal ficticio', especie: 'perro', microship: '123' }],
+    });
+  }
 });
 
 test('el rechazo de M1 no se confunde con un permiso local ni invalida la sesión por un token de servicio', async () => {
-  await comprobarError(await acceder(catalogo, cabecera('demo.funcionario')), 503, 'SERVICIO_NO_DISPONIBLE');
+  await comprobarError(await acceder(catalogo, cabecera('demo.funcionario')), 403, 'PERFIL_NO_AUTORIZADO');
   const servicio = createServer(crearApp({
     nucleoUrl: `http://127.0.0.1:${core.address().port}`,
     tokenRegistro: 'demo.servicio-vencido',
