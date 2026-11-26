@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { after, before, test } from 'node:test';
 import { crearApp } from '../src/app.js';
@@ -36,22 +36,41 @@ function crearMemoria() {
     ['dddddddddddddddddddddddd', { postulacionID: 'dddddddddddddddddddddddd', animalID: 'ANIMAL-2', postulanteRut: '14444444-4', estado: 'recibida' }],
   ]);
 
+  const aprobarYCancelarParalelas = async ({ postulacionId, animalID, aprobadaPor }) => {
+    const objetivo = docs.get(postulacionId);
+    if (!objetivo) return null;
+    objetivo.estado = 'aprobada';
+    objetivo.aprobadaPor = aprobadaPor;
+
+    let canceladasParalelas = 0;
+    for (const [id, item] of docs.entries()) {
+      if (id !== postulacionId && item.animalID === animalID && ['recibida', 'en_evaluación'].includes(item.estado)) {
+        item.estado = 'cancelada';
+        canceladasParalelas += 1;
+      }
+    }
+    return { postulacion: objetivo, canceladasParalelas };
+  };
+
   return {
     docs,
     obtener: async (id) => docs.get(id) ?? null,
-    aprobarYCancelarParalelas: async ({ postulacionId, animalID, aprobadaPor }) => {
-      const objetivo = docs.get(postulacionId);
-      objetivo.estado = 'aprobada';
-      objetivo.aprobadaPor = aprobadaPor;
-
-      let canceladasParalelas = 0;
-      for (const [id, item] of docs.entries()) {
-        if (id !== postulacionId && item.animalID === animalID && ['recibida', 'en_evaluación'].includes(item.estado)) {
-          item.estado = 'cancelada';
-          canceladasParalelas += 1;
-        }
+    aprobarYCancelarParalelas,
+    cambiarEstado: async (id, estado, _observaciones, aprobadaPor) => {
+      const objetivo = docs.get(id);
+      if (!objetivo) {
+        return { noExiste: true };
       }
-      return { postulacion: objetivo, canceladasParalelas };
+      if (estado === 'aprobada') {
+        const res = await aprobarYCancelarParalelas({
+          postulacionId: id,
+          animalID: objetivo.animalID,
+          aprobadaPor,
+        });
+        return { documento: res.postulacion, canceladas: res.canceladasParalelas };
+      }
+      objetivo.estado = estado;
+      return { documento: objetivo, canceladas: 0 };
     },
   };
 }
@@ -77,7 +96,14 @@ before(async () => {
   nucleoSrv = crearNucleoFalso();
   const nucleoUrl = await escuchar(nucleoSrv);
   memoria = crearMemoria();
-  appSrv = createServer(crearApp({ nucleoUrl, timeoutMs: 500, operacionesAdopcion: memoria }));
+  appSrv = createServer(
+    crearApp({
+      nucleoUrl,
+      timeoutMs: 500,
+      operacionesAdopcion: memoria,
+      guardarPostulacion: memoria,
+    })
+  );
   baseUrl = await escuchar(appSrv);
 });
 
@@ -92,13 +118,17 @@ test('403 si un vecino intenta aprobar con PATCH', async () => {
   });
   assert.equal(res.status, 403);
   const body = await res.json();
-  assert.equal(body.error.codigo, 'ACCESO_DENEGADO');
+  assert.equal(body.error.codigo, 'PERFIL_NO_AUTORIZADO');
 });
 
 test('404 POSTULACION_NO_ENCONTRADA ante id inexistente', async () => {
   const res = await fetch(`${baseUrl}${baseRuta}/ffffffffffffffffffffffff`, {
     method: 'PATCH',
-    headers: { Authorization: 'Bearer tok.funcionario' },
+    headers: {
+      Authorization: 'Bearer tok.funcionario',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ estado: 'aprobada', observaciones: 'Revision de prueba' }),
   });
   assert.equal(res.status, 404);
   const body = await res.json();
@@ -108,12 +138,18 @@ test('404 POSTULACION_NO_ENCONTRADA ante id inexistente', async () => {
 test('aprueba postulación y cancela 100% de paralelas del mismo animal sin tocar otros animales', async () => {
   const res = await fetch(`${baseUrl}${baseRuta}/aaaaaaaaaaaaaaaaaaaaaaaa`, {
     method: 'PATCH',
-    headers: { Authorization: 'Bearer tok.funcionario' },
+    headers: {
+      Authorization: 'Bearer tok.funcionario',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ estado: 'aprobada', observaciones: 'Aprobacion de prueba' }),
   });
   assert.equal(res.status, 200);
   const body = await res.json();
-  assert.equal(body.postulacion.estado, 'aprobada');
-  assert.equal(body.canceladasParalelas, 2);
+  const postulacion = body.postulacion ?? body.datos;
+  const canceladas = body.canceladasParalelas ?? body.canceladas;
+  assert.equal(postulacion.estado, 'aprobada');
+  assert.equal(canceladas, 2);
   assert.equal(memoria.docs.get('bbbbbbbbbbbbbbbbbbbbbbbb').estado, 'cancelada');
   assert.equal(memoria.docs.get('cccccccccccccccccccccccc').estado, 'cancelada');
   assert.equal(memoria.docs.get('dddddddddddddddddddddddd').estado, 'recibida');

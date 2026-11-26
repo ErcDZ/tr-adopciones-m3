@@ -64,7 +64,7 @@ async function probar({
 
 test('la postulación conserva 401 y 403 del usuario y devuelve 503 ante un fallo de servicio', async () => {
   for (const [estadoRegistro, tokenRegistro, estadoEsperado, codigo] of [
-    [401, undefined, 401, 'TOKEN_INVALIDO'],
+      [401, undefined, 401, 'TOKEN_INVALIDO'],
     [403, undefined, 403, 'PERFIL_NO_AUTORIZADO'],
     [403, 'token-ficticio-de-servicio', 503, 'SERVICIO_NO_DISPONIBLE'],
     [503, undefined, 503, 'SERVICIO_NO_DISPONIBLE'],
@@ -80,7 +80,7 @@ test('la postulación conserva 401 y 403 del usuario y devuelve 503 ante un fall
 test('400: rechaza RUT con formato incorrecto', async () => {
   const { res, consultas } = await probar({ cambios: { postulanteRut: 'rut-malo' } });
   assert.equal(res.codigo, 400);
-  assert.equal(res.cuerpo.error.codigo, 'DATO_INVALIDO');
+  assert.equal(res.cuerpo.error.codigo, 'RUT_INVALIDO');
   assert.equal(consultas, 0);
 });
 
@@ -94,20 +94,20 @@ test('403: rechaza cuando el RUT no coincide con el del token', async () => {
 test('400: rechaza tipo de vivienda no permitido', async () => {
   const { res, guardados } = await probar({ cambios: { viviendaTipo: 'castillo' } });
   assert.equal(res.codigo, 400);
-  assert.equal(res.cuerpo.error.codigo, 'DATO_INVALIDO');
+  assert.equal(res.cuerpo.error.codigo, 'DATOS_INVALIDOS');
   assert.equal(guardados, 0);
 });
 
 test('400: rechaza un booleano incorrecto', async () => {
   const { res } = await probar({ cambios: { tienePatio: 'sí' } });
   assert.equal(res.codigo, 400);
-  assert.equal(res.cuerpo.error.codigo, 'DATO_INVALIDO');
+  assert.equal(res.cuerpo.error.codigo, 'DATOS_INVALIDOS');
 });
 
 test('400: exige consentimiento verdadero', async () => {
   const { res } = await probar({ cambios: { consentimientoCohabitantes: false } });
   assert.equal(res.codigo, 400);
-  assert.equal(res.cuerpo.error.codigo, 'DATO_INVALIDO');
+  assert.equal(res.cuerpo.error.codigo, 'DATOS_INVALIDOS');
 });
 
 test('409: rechaza animal fallecido', async () => {

@@ -4,7 +4,7 @@
     "grupo": 3,
     "modulo": 3,
     "repositorio": "tr-adopciones-m3",
-    "urlNube": "",
+    "urlNube": "https://tr-adopciones-m3.onrender.com",
     "wikiContratoApi": "https://tree.taiga.io/project/bastianmadariaga-ti3034-d-iei-n4-p2-c2e-f-m3/wiki/contrato-de-api"
   },
   "integrantes": [
@@ -42,47 +42,47 @@
   "verificaciones": [
     {
       "historia": "HU-01",
-      "descripcion": "Consulta de animales disponibles para adopción",
+      "descripcion": "Consulta de animales disponibles para adopción con paginación",
       "metodo": "GET",
-      "url": "https://TU-SERVICIO-EN-LA-NUBE.onrender.com/api/adopciones/animales-disponibles?page=1&limit=10",
+      "url": "https://tr-adopciones-m3.onrender.com/api/adopciones/animales-disponibles?page=1&limit=10",
       "requiereAuth": true,
       "perfilPrueba": "vecino",
       "codigoHttpEsperado": 200
     },
     {
       "historia": "HU-02",
-      "descripcion": "Verificación de la historia HU-02 en el servicio desplegado",
+      "descripcion": "Validación de acceso con perfil vecino",
       "metodo": "GET",
-      "url": "https://TU-SERVICIO-EN-LA-NUBE.onrender.com/RUTA_HU_02",
+      "url": "https://tr-adopciones-m3.onrender.com/api/adopciones/acceso/vecino",
       "requiereAuth": true,
       "perfilPrueba": "vecino",
       "codigoHttpEsperado": 200
     },
     {
       "historia": "HU-03",
-      "descripcion": "Verificación de la historia HU-03 en el servicio desplegado",
-      "metodo": "GET",
-      "url": "https://TU-SERVICIO-EN-LA-NUBE.onrender.com/RUTA_HU_03",
+      "descripcion": "Creación de postulación de adopción por vecino",
+      "metodo": "POST",
+      "url": "https://tr-adopciones-m3.onrender.com/api/adopciones/postulaciones",
       "requiereAuth": true,
       "perfilPrueba": "vecino",
-      "codigoHttpEsperado": 200
+      "codigoHttpEsperado": 201
     },
     {
       "historia": "HU-04",
-      "descripcion": "Postulación / gestión de postulaciones o aprobación con cascada (HU-04.3)",
+      "descripcion": "Aprobación de postulación y cancelación de paralelas por funcionario",
       "metodo": "PATCH",
-      "url": "https://TU-SERVICIO-EN-LA-NUBE.onrender.com/api/adopciones/postulaciones/POST_ID_PRUEBA",
+      "url": "https://tr-adopciones-m3.onrender.com/api/adopciones/postulaciones/POST_ID_PRUEBA",
       "requiereAuth": true,
       "perfilPrueba": "funcionario",
       "codigoHttpEsperado": 200
     },
     {
       "historia": "HU-05",
-      "descripcion": "Verificación de la historia HU-05 en el servicio desplegado",
+      "descripcion": "Validación de acceso con perfil funcionario",
       "metodo": "GET",
-      "url": "https://TU-SERVICIO-EN-LA-NUBE.onrender.com/RUTA_HU_05",
+      "url": "https://tr-adopciones-m3.onrender.com/api/adopciones/acceso/funcionario",
       "requiereAuth": true,
-      "perfilPrueba": "vecino",
+      "perfilPrueba": "funcionario",
       "codigoHttpEsperado": 200
     }
   ]
