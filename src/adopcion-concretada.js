@@ -8,8 +8,7 @@ const CONFLICTOS = {
 };
 
 // PATCH /api/adopciones/postulaciones/{postulacionId}: transición aprobada → adopcion_concretada (RN-08).
-// Orden: validar entrada → leer postulación → validar estado y confirmaciones → notificar a M1 →
-// confirmar en MongoDB. Si M1 falla, no se escribe nada en MongoDB.
+// MongoDB confirma el cambio solo después de que M1 acepta la actualización.
 export function concretarAdopcion({ consultarRegistro, operaciones, error }) {
   return async (req, res) => {
     const { postulacionId } = req.params;
@@ -47,53 +46,49 @@ export function concretarAdopcion({ consultarRegistro, operaciones, error }) {
       return error(res, 409, 'CONFIRMACION_REQUERIDA',
         'Debe confirmarse el retiro físico del animal y la firma del acta de compromiso');
     }
-    try {
-      if (await operaciones.animalAdoptado(postulacion.animalID)) {
-        return error(res, 409, 'ANIMAL_NO_DISPONIBLE', CONFLICTOS.ANIMAL_NO_DISPONIBLE);
-      }
-    } catch {
-      return error(res, 503, 'SERVICIO_NO_DISPONIBLE', 'No pudimos comprobar el estado del animal');
-    }
+    let notificacion;
+    let falloRegistro;
+    const notificar = documento => {
+      // Reusar el resultado si el driver repite el callback de la transacción.
+      notificacion ??= actualizarTutor(documento);
+      return notificacion;
+    };
+    async function actualizarTutor(documento) {
+      const tutor = await consultarRegistro(`/api/registro/animales/${encodeURIComponent(documento.animalID)}/tutor`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: req.get('Authorization'),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ tutorRut: documento.postulanteRut }),
+      });
+      if (tutor.estado === 200 && tutor.datos?.animalId === documento.animalID &&
+          tutor.datos?.tutorRut === documento.postulanteRut) return;
 
-    // Notificar al módulo 1 ANTES de confirmar en MongoDB.
-    const tutor = await consultarRegistro(`/api/registro/animales/${encodeURIComponent(postulacion.animalID)}/tutor`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: req.get('Authorization'),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ tutorRut: postulacion.postulanteRut }),
-    });
-    if (tutor.estado === 404 && tutor.datos?.error?.codigo === 'ANIMAL_NO_ENCONTRADO') {
-      return error(res, 404, 'ANIMAL_NO_ENCONTRADO', 'El animal no existe en el registro');
-    }
-    if (tutor.estado === 401) {
-      return error(res, 401, 'TOKEN_INVALIDO', 'El token no es válido o expiró');
-    }
-    if (tutor.estado === 403) {
-      return error(res, 403, 'PERFIL_NO_AUTORIZADO', 'El registro no permite actualizar el tutor');
-    }
-    if (tutor.estado === 409) {
-      return error(res, 409, 'TUTOR_NO_ACTUALIZADO', 'El registro rechazó el cambio de tutor');
-    }
-    if (tutor.estado !== 200 || tutor.datos?.animalId !== postulacion.animalID ||
-        tutor.datos?.tutorRut !== postulacion.postulanteRut) {
-      // Bloqueo de la transición: la postulación sigue en "aprobada".
-      return error(res, 503, 'SERVICIO_NO_DISPONIBLE',
-        'No pudimos actualizar el tutor en el registro; la adopción no se concretó');
+      const errores = {
+        401: [401, 'TOKEN_INVALIDO', 'El token no es válido o expiró'],
+        403: [403, 'PERFIL_NO_AUTORIZADO', 'El registro no permite actualizar el tutor'],
+        404: [404, 'ANIMAL_NO_ENCONTRADO', 'El animal no existe en el registro'],
+        409: [409, 'TUTOR_NO_ACTUALIZADO', 'El registro rechazó el cambio de tutor'],
+      };
+      falloRegistro = errores[tutor.estado] ?? [
+        503, 'SERVICIO_NO_DISPONIBLE', 'No pudimos actualizar el tutor en el registro; la adopción no se concretó',
+      ];
+      throw new Error('No se confirmó la actualización en M1');
     }
 
     let resultado;
     try {
-      resultado = await operaciones.concretar(postulacionId, {
+      resultado = await operaciones.concretar(postulacionId, postulacion.animalID, {
         retiroFisicoConfirmado: true,
         actaFirmada: true,
         fechaConcrecion: new Date().toISOString(),
         concretadaPor: req.usuario.rut,
-      });
+      }, notificar);
     } catch {
+      if (falloRegistro) return error(res, ...falloRegistro);
       return error(res, 503, 'SERVICIO_NO_DISPONIBLE',
-        'El registro fue notificado, pero no pudimos guardar el cambio. Reintenta la operación');
+        'No pudimos confirmar la concreción. Consulta el estado antes de reintentar');
     }
     if (resultado.conflicto) {
       return error(res, 409, resultado.conflicto, CONFLICTOS[resultado.conflicto]);

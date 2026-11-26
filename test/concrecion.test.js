@@ -35,9 +35,10 @@ test('la concreción exige funcionario, confirmaciones y aceptación de M1 antes
   const guardarPostulacion = () => {};
   guardarPostulacion.operacionesConcrecion = {
     obtener: async () => postulacion,
-    animalAdoptado: async () => false,
-    concretar: async (postulacionId, cambios) => {
+    concretar: async (postulacionId, animalID, cambios, notificar) => {
       assert.equal(postulacionId, id);
+      assert.equal(animalID, postulacion.animalID);
+      await notificar(postulacion);
       guardados++;
       Object.assign(postulacion, cambios, { estado: 'adopcion_concretada' });
       return { documento: postulacion };
@@ -60,10 +61,21 @@ test('la concreción exige funcionario, confirmaciones y aceptación de M1 antes
 
   assert.equal((await confirmar(confirmaciones, 'vecino')).status, 403);
   assert.equal((await confirmar()).status, 409);
+  postulacion.estado = 'en_evaluación';
+  const desdeEvaluacion = await confirmar();
+  assert.equal(desdeEvaluacion.status, 409);
+  assert.equal((await desdeEvaluacion.json()).error.codigo, 'TRANSICION_INVALIDA');
   postulacion.estado = 'aprobada';
   assert.equal((await confirmar({ ...confirmaciones, actaFirmada: false })).status, 409);
   assert.equal(llamadasM1, 0);
-  assert.equal((await confirmar()).status, 503);
+  const indisponible = await confirmar();
+  assert.equal(indisponible.status, 503);
+  assert.deepEqual(await indisponible.json(), {
+    error: {
+      codigo: 'SERVICIO_NO_DISPONIBLE',
+      mensaje: 'No pudimos actualizar el tutor en el registro; la adopción no se concretó',
+    },
+  });
   assert.equal(guardados, 0);
   assert.equal(postulacion.estado, 'aprobada');
   respuestaM1 = { estado: 200, datos: { animalId: postulacion.animalID, tutorRut: 'otro-rut' } };
