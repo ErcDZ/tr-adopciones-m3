@@ -3,6 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { crearClienteNucleo } from './nucleo.js';
 import { crearPostulacion, RUTA_POSTULACIONES } from './postulaciones.js';
+import { listarAnimalesDisponibles, RUTA_ANIMALES_DISPONIBLES } from './animales.js';
 
 const SESIONES = '/api/nucleo/sesiones';
 
@@ -139,6 +140,12 @@ export function crearApp({
 
   app.get('/api/adopciones/acceso/funcionario',
     autenticar, requierePerfil('funcionario'), responderUsuario);
+
+  app.get([RUTA_ANIMALES_DISPONIBLES, '/api/adopciones/catalogo'],
+    autenticar,
+    requierePerfil('vecino', 'funcionario'),
+    listarAnimalesDisponibles({ consultarRegistro, tokenRegistro, error })
+  );
 
   // CREAR POSTULACION - SPRINT 3
   app.post(RUTA_POSTULACIONES,
