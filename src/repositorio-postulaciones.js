@@ -185,7 +185,7 @@ export async function crearRepositorioPostulaciones(cliente) {
           const aprobada = await postulaciones.findOne(
             {
               animalID,
-              estado: 'aprobada',
+              estado: { $in: ['aprobada', 'adopcion_concretada'] },
               _id: { $ne: objetoId }
             },
             { session: sesion }
@@ -248,6 +248,25 @@ export async function crearRepositorioPostulaciones(cliente) {
         writeConcern: { w: 'majority' }
       })
     );
+  };
+
+  guardar.operacionesConcrecion = {
+    obtener: guardar.buscarPorId,
+    animalAdoptado: async animalID => Boolean(
+      await postulaciones.findOne({ animalID, estado: 'adopcion_concretada' }, { projection: { _id: 1 } })
+    ),
+    async concretar(id, cambios) {
+      const documento = await postulaciones.findOneAndUpdate(
+        { _id: new ObjectId(id), estado: 'aprobada' },
+        { $set: {
+          ...cambios,
+          estado: 'adopcion_concretada',
+          fechaActualizacion: cambios.fechaConcrecion,
+        } },
+        { returnDocument: 'after', projection: { _id: 0 }, writeConcern: { w: 'majority' } }
+      );
+      return documento ? { documento } : { conflicto: 'TRANSICION_INVALIDA' };
+    },
   };
 
   return guardar;
